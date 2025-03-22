@@ -1,0 +1,66 @@
+/* Stili per la topbar */
+.app-pinner-container {
+    padding: 0 4px;
+    margin: 8px; /* Spazio tra menu icon e app pinnate */
+}
+
+.app-pinner-icons {
+    margin: 6px; /* Spazio tra le icone */
+}
+
+.app-pinner-icon {
+    padding: 2px;
+    -natural-hpadding: 0;
+    -minimum-hpadding: 0;
+    transition: transform 0.2s ease-in-out;
+    width: 24px; /* Dimensione icone aumentata */
+    height: 24px;
+    border-radius: 6px;
+    background-color: transparent;
+}
+
+/* Hover sulle singole icone */
+.app-pinner-icon:hover {
+    transform: scale(1.15);
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+
+.app-pinner-remove-btn:hover {
+    background-color: rgba(255, 69, 0, 0.2);
+    font-size: 18px;
+}
+
+.popup-menu-item {
+    margin: 12px;
+    padding: 8px 12px;
+    margin: 2px 0;
+}
+
+.popup-menu-item StIcon {
+    font-size: 24px;
+    margin-right: 12px;
+}
+
+/* Elimina hover sull'intera estensione */
+.app-pinner-container:hover {
+    background-color: transparent !important;
+}
+/* Forza la visualizzazione delle icone */
+.app-pinner-icons StIcon {
+    font-size: 24px;
+    min-width: 24px;
+    min-height: 24px;
+}
+
+/* Allineamento contenitore */
+.app-pinner-container {
+    margin: 8px;
+    padding: 0 4px;
+    margin: 0;
+}
+
+/* Fix per GNOME 45+ */
+.app-pinner-icons {
+    -st-box-layout: horizontal;
+}

@@ -1,7 +1,8 @@
 {
-    "name": "quick-launch",
-    "description": "Adds favorite application icons to the top bar for quick and easy launching",
-    "uuid": "quicklaunch@comitanigiacomo.github.com",
-    "shell-version": ["47"],
-    "settings-schema": "org.gnome.shell.extensions.app-pinner"
-  }
+  "name": "quick-launch",
+  "description": "Adds favorite application icons to the top bar for quick and easy launching",
+  "uuid": "quicklaunch@comitanigiacomo.github.com",
+  "shell-version": ["47"],
+  "settings-schema": "org.gnome.shell.extensions.app-pinner",
+  "stylesheet": "css/stylesheet.css"
+}

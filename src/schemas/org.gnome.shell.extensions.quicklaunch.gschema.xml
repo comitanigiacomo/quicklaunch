@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.app-pinner" path="/org/gnome/shell/extensions/app-pinner/">
+    <key name="pinned-apps" type="as">
+      <default>[]</default>
+      <summary>List of pinned applications</summary>
+      <description>
+        A list of application desktop file names to be pinned in the top panel.
+      </description>
+    </key>
+  </schema>
+</schemalist>

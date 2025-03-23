@@ -1,12 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.app-pinner" path="/org/gnome/shell/extensions/app-pinner/">
+    
+    <!-- Applicazioni Pinnate -->
     <key name="pinned-apps" type="as">
       <default>[]</default>
-      <summary>List of pinned applications</summary>
-      <description>
-        A list of application desktop file names to be pinned in the top panel.
-      </description>
+      <summary>Pinned Applications</summary>
     </key>
+
+    <!-- Aspetto -->
+    <key name="icon-size" type="i">
+      <default>24</default>
+      <range min="16" max="48"/>
+      <summary>Icon size in pixels</summary>
+    </key>
+
+    <key name="position-in-panel" type="s">
+      <default>'left'</default>
+      <choices>
+        <choice value='left'/>
+        <choice value='center'/>
+        <choice value='right'/>
+      </choices>
+      <summary>Panel position</summary>
+    </key>
+
+    <key name="spacing" type="i">
+      <default>6</default>
+      <range min="0" max="24"/>
+      <summary>Spacing between icons</summary>
+    </key>
+
+    <key name="enable-labels" type="b">
+      <default>false</default>
+      <summary>Show application labels</summary>
+    </key>
+
+    <!-- Comportamento -->
+    <key name="launch-animation" type="b">
+      <default>true</default>
+      <summary>Enable launch animation</summary>
+    </key>
+
+    <!-- Avanzate -->
+    <key name="max-apps" type="i">
+      <default>10</default>
+      <range min="1" max="20"/>
+      <summary>Maximum apps to display</summary>
+    </key>
+
+    <key name="default-apps" type="as">
+      <default>['org.gnome.Calculator.desktop']</default>
+      <summary>Default suggested apps</summary>
+    </key>
+
   </schema>
 </schemalist>

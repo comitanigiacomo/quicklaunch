@@ -58,7 +58,7 @@ class AppPinner extends PanelMenu.Button {
         });
         
         this._searchInput = new St.Entry({
-            hint_text: _('Cerca applicazioni...'),
+            hint_text: _('Search applications...'),
             can_focus: true
         });
         searchBox.add_child(this._searchInput);
@@ -95,8 +95,7 @@ class AppPinner extends PanelMenu.Button {
         this._resultsSection.box.destroy_all_children();
         const query = this._searchInput.get_text().trim().toLowerCase();
 
-        if (query.length === 0) {
-            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('Inserisci un termine di ricerca')));
+        if (query === '') {
             return;
         }
 
@@ -143,7 +142,7 @@ class AppPinner extends PanelMenu.Button {
         const maxResults = filteredApps.slice(0, 10);
         
         if (maxResults.length === 0) {
-            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('Nessun risultato trovato')));
+            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('No results found')));
             return;
         }
 
@@ -157,7 +156,9 @@ class AppPinner extends PanelMenu.Button {
             item.add_child(icon);
             item.label.x_expand = true;
             
+            // Apre l'applicazione e la pinna
             item.connect('activate', () => {
+                Util.spawn(app.get_commandline().split(' '));
                 this._pinApp(app);
                 this._searchInput.set_text('');
                 this._updateSearch();
@@ -192,7 +193,10 @@ class AppPinner extends PanelMenu.Button {
             can_focus: false
         });
 
-        icon.connect('clicked', () => Util.spawn(app.get_commandline().split(' ')));
+        icon.connect('clicked', () => {
+            Util.spawn(app.get_commandline().split(' '));
+            this.menu.close();
+        });
         this._pinnedIconsBox.add_child(icon);
     }
 
@@ -208,11 +212,17 @@ class AppPinner extends PanelMenu.Button {
         
         item.insert_child_at_index(icon, 0);
         item.label.x_expand = true;
+
+        // Apre l'applicazione cliccando su qualsiasi parte della riga
+        item.connect('activate', () => {
+            Util.spawn(app.get_commandline().split(' '));
+            this.menu.close();
+        });
     
         const removeBtn = new St.Button({
             child: new St.Icon({
                 icon_name: 'window-close-symbolic',
-                icon_size: 16,
+                icon_size: 14,
                 style_class: 'app-pinner-remove-icon'
             }),
             style_class: 'app-pinner-remove-btn',

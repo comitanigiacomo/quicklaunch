@@ -1,4 +1,3 @@
-/* extension.js */
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
@@ -17,7 +16,6 @@ class AppPinner extends PanelMenu.Button {
         this._settings = settings;
         this._destroyed = false;
     
-        // Contenitore principale
         this._mainContainer = new St.BoxLayout({
             style_class: 'app-pinner-container',
             vertical: false,
@@ -26,7 +24,6 @@ class AppPinner extends PanelMenu.Button {
         });
         this.add_child(this._mainContainer);
     
-        // Icona del menu
         this._menuIcon = new St.Icon({
             icon_name: 'view-pin-symbolic',
             style_class: 'system-status-icon app-pinner-menu-icon',
@@ -34,7 +31,6 @@ class AppPinner extends PanelMenu.Button {
         });
         this._mainContainer.add_child(this._menuIcon);
     
-        // Contenitore per le icone pinnate
         this._pinnedIconsBox = new St.BoxLayout({
             style_class: 'app-pinner-icons',
             vertical: false,
@@ -42,7 +38,6 @@ class AppPinner extends PanelMenu.Button {
         });
         this._mainContainer.add_child(this._pinnedIconsBox);
     
-        // Inizializza il menu
         this._buildMenu();
         this._loadPinnedApps();
     }
@@ -50,7 +45,6 @@ class AppPinner extends PanelMenu.Button {
     _buildMenu() {
         this.menu.removeAll();
 
-        // Campo di ricerca
         this._searchEntry = new PopupMenu.PopupBaseMenuItem();
         const searchBox = new St.BoxLayout({ 
             vertical: false, 
@@ -61,15 +55,14 @@ class AppPinner extends PanelMenu.Button {
             hint_text: _('Search applications...'),
             can_focus: true
         });
+
         searchBox.add_child(this._searchInput);
         this._searchEntry.actor.add_child(searchBox);
         this.menu.addMenuItem(this._searchEntry);
 
-        // Risultati ricerca
         this._resultsSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._resultsSection);
 
-        // App pinnate nel menu
         this._pinnedSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this.menu.addMenuItem(this._pinnedSection);
@@ -119,7 +112,6 @@ class AppPinner extends PanelMenu.Button {
             }
         }
 
-        // Ordina per rilevanza
         filteredApps.sort((a, b) => {
             const aName = a.get_name().toLowerCase();
             const bName = b.get_name().toLowerCase();
@@ -138,7 +130,6 @@ class AppPinner extends PanelMenu.Button {
             return aName.length - bName.length;
         });
 
-        // Mostra massimo 10 risultati
         const maxResults = filteredApps.slice(0, 10);
         
         if (maxResults.length === 0) {
@@ -156,7 +147,6 @@ class AppPinner extends PanelMenu.Button {
             item.add_child(icon);
             item.label.x_expand = true;
             
-            // Modificato: Solo pinna l'app senza aprirla
             item.connect('activate', () => {
                 this._pinApp(app);
                 this._searchInput.set_text('');
@@ -192,7 +182,6 @@ class AppPinner extends PanelMenu.Button {
             can_focus: false
         });
 
-        // Mantenuto: Apre l'app al click
         icon.connect('clicked', () => {
             Util.spawn(app.get_commandline().split(' '));
             this.menu.close();
@@ -213,20 +202,17 @@ class AppPinner extends PanelMenu.Button {
         item.insert_child_at_index(icon, 0);
         item.label.x_expand = true;
 
-        // Mantenuto: Apre l'app al click
         item.connect('activate', () => {
             Util.spawn(app.get_commandline().split(' '));
             this.menu.close();
         });
     
         const removeBtn = new St.Button({
-            child: new St.Icon({
-                icon_name: 'window-close-symbolic',
-                icon_size: 14,
-                style_class: 'app-pinner-remove-icon'
+            child: new St.Label({
+                text: '×',
+                style_class: 'app-pinner-remove-label'
             }),
             style_class: 'app-pinner-remove-btn',
-            x_align: Clutter.ActorAlign.END,
             button_mask: St.ButtonMask.ONE
         });
     

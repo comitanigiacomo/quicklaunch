@@ -21,8 +21,8 @@ class AppPinner extends PanelMenu.Button {
         this._mainContainer = new St.BoxLayout({
             style_class: 'app-pinner-container',
             vertical: false,
-            x_expand: true, // Aggiungi questo
-            x_align: Clutter.ActorAlign.START // Aggiungi questo
+            x_expand: true,
+            x_align: Clutter.ActorAlign.CENTER
         });
         this.add_child(this._mainContainer);
     
@@ -52,7 +52,10 @@ class AppPinner extends PanelMenu.Button {
 
         // Campo di ricerca
         this._searchEntry = new PopupMenu.PopupBaseMenuItem();
-        const searchBox = new St.BoxLayout({ vertical: false });
+        const searchBox = new St.BoxLayout({ 
+            vertical: false, 
+            style_class: 'search-box'
+        });
         
         this._searchInput = new St.Entry({
             hint_text: _('Cerca applicazioni...'),
@@ -74,22 +77,77 @@ class AppPinner extends PanelMenu.Button {
         this._searchInput.clutter_text.connect('text-changed', () => this._updateSearch());
     }
 
+    _fuzzyMatch(pattern, str) {
+        const patternChars = pattern.toLowerCase().split('');
+        const strChars = str.toLowerCase().split('');
+        let patternIndex = 0;
+
+        for (const char of strChars) {
+            if (char === patternChars[patternIndex]) {
+                patternIndex++;
+                if (patternIndex === patternChars.length) return true;
+            }
+        }
+        return false;
+    }
+
     async _updateSearch() {
         this._resultsSection.box.destroy_all_children();
-        const query = this._searchInput.get_text().toLowerCase();
+        const query = this._searchInput.get_text().trim().toLowerCase();
 
-        if (query.length < 2) {
-            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('Inserisci almeno 2 caratteri')));
+        if (query.length === 0) {
+            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('Inserisci un termine di ricerca')));
             return;
         }
 
         const appSys = Shell.AppSystem.get_default();
-        const apps = appSys.get_installed().filter(app => 
-            app.get_name().toLowerCase().includes(query) && 
-            !this._isPinned(app.get_id())
-        );
+        const allApps = appSys.get_installed();
+        const filteredApps = [];
 
-        apps.forEach(app => {
+        for (const app of allApps) {
+            if (this._isPinned(app.get_id())) continue;
+
+            const appName = app.get_name().toLowerCase();
+            const keywords = appName.split(/[\s-]/);
+            
+            const matches = 
+                appName.includes(query) ||
+                keywords.some(k => k.startsWith(query)) ||
+                this._fuzzyMatch(query, appName);
+
+            if (matches) {
+                filteredApps.push(app);
+            }
+        }
+
+        // Ordina per rilevanza
+        filteredApps.sort((a, b) => {
+            const aName = a.get_name().toLowerCase();
+            const bName = b.get_name().toLowerCase();
+            
+            // Priorità 1: Match esatto
+            if (aName === query) return -1;
+            if (bName === query) return 1;
+            
+            // Priorità 2: Inizio parola
+            const aStarts = aName.startsWith(query);
+            const bStarts = bName.startsWith(query);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            
+            // Priorità 3: Lunghezza nome
+            return aName.length - bName.length;
+        });
+
+        // Mostra massimo 10 risultati
+        const maxResults = filteredApps.slice(0, 10);
+        
+        if (maxResults.length === 0) {
+            this._resultsSection.box.add_child(new PopupMenu.PopupMenuItem(_('Nessun risultato trovato')));
+            return;
+        }
+
+        maxResults.forEach(app => {
             const item = new PopupMenu.PopupMenuItem(app.get_name());
             const icon = new St.Icon({
                 gicon: app.get_icon(),
@@ -127,9 +185,9 @@ class AppPinner extends PanelMenu.Button {
         const icon = new St.Button({
             child: new St.Icon({
                 gicon: app.get_icon(),
-                icon_size: 24 // Dimensione corrispondente al CSS
+                icon_size: 24
             }),
-            style_class: 'app-pinner-icon', // Aggiungi questa classe
+            style_class: 'app-pinner-icon',
             reactive: true,
             can_focus: false
         });
@@ -148,11 +206,9 @@ class AppPinner extends PanelMenu.Button {
             icon_size: 24
         });
         
-        // Aggiungi l'icona prima del testo
         item.insert_child_at_index(icon, 0);
         item.label.x_expand = true;
     
-        // Pulsante di rimozione migliorato
         const removeBtn = new St.Button({
             child: new St.Icon({
                 icon_name: 'window-close-symbolic',
@@ -161,34 +217,25 @@ class AppPinner extends PanelMenu.Button {
             }),
             style_class: 'app-pinner-remove-btn',
             x_align: Clutter.ActorAlign.END,
-            button_mask: St.ButtonMask.ONE // Reagisce solo al click sinistro
+            button_mask: St.ButtonMask.ONE
         });
     
-        // Connessione eventi rinforzata
         removeBtn.connect('button-press-event', (actor, event) => {
             this._unpinApp(appId);
-            
-            // Forza un refresh completo
             this.menu.close();
             this.menu.open();
-            
-            return Clutter.EVENT_STOP; // Blocca completamente la propagazione
+            return Clutter.EVENT_STOP;
         });
     
         item.add_child(removeBtn);
         this._pinnedSection.box.add_child(item);
     }
-    
-    
-    // Aggiungi questo metodo per aggiornare correttamente
+
     _unpinApp(appId) {
         const current = this._settings.get_strv('pinned-apps');
         const updated = current.filter(id => id !== appId);
         this._settings.set_strv('pinned-apps', updated);
-        
-        // Forza l'aggiornamento dell'interfaccia
         this._loadPinnedApps();
-        this.menu.open(); // Riapre il menu per feedback visivo
     }
 
     _pinApp(app) {
@@ -200,13 +247,6 @@ class AppPinner extends PanelMenu.Button {
         }
     }
 
-    _unpinApp(appId) {
-        const current = this._settings.get_strv('pinned-apps');
-        const updated = current.filter(id => id !== appId);
-        this._settings.set_strv('pinned-apps', updated);
-        this._loadPinnedApps();
-    }
-
     _isPinned(appId) {
         return this._settings.get_strv('pinned-apps').includes(appId);
     }
@@ -214,7 +254,6 @@ class AppPinner extends PanelMenu.Button {
     destroy() {
         if (this._destroyed) return;
         this._destroyed = true;
-        
         this._pinnedIconsBox.destroy_all_children();
         this._searchInput.destroy();
         super.destroy();

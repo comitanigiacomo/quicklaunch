@@ -6,8 +6,8 @@
 
 **Quick Launch** turns your GNOME top panel into a powerful and intuitive application launcher. Keep your favorite apps just one click away with this lightweight extension designed to enhance your GNOME experience.
 
-![Quick Launch in Action](images/image.png)\
-![Quick Launch in Action](images/image-2.png)
+![Quick Launch in Action](images/image.png)
+
 
 ## ✨ Key Features
 
@@ -27,7 +27,7 @@
 ## 📥 Installation
 
 ### Via GNOME Extensions Marketplace (Recommended)
-1. Visit [Quick Launch GNOME Extension Page](https://extensions.gnome.org/extension/XXXX/quick-launch).
+1. Visit [Quick Launch GNOME Extension Page](https://extensions.gnome.org/extension/8005/quick-launch/).
 2. Toggle the switch to install the extension.
 3. Press **Alt+F2**, type `r`, and press Enter to reload GNOME Shell.
 

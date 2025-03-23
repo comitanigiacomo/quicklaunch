@@ -21,7 +21,7 @@ class AppPinner extends PanelMenu.Button {
             style_class: 'app-pinner-container',
             vertical: false,
             x_expand: true,
-            x_align: this._getPanelPosition()
+            y_expand: true
         });
         this.add_child(this._mainContainer);
 
@@ -37,7 +37,8 @@ class AppPinner extends PanelMenu.Button {
         this._pinnedIconsBox = new St.BoxLayout({
             style_class: 'app-pinner-icons',
             vertical: false,
-            x_expand: true
+            x_expand: true,
+            y_expand: true
         });
         this._mainContainer.add_child(this._pinnedIconsBox);
 
@@ -203,13 +204,14 @@ class AppPinner extends PanelMenu.Button {
 
         const iconBox = new St.BoxLayout({ 
             vertical: true,
-            style_class: 'app-pinner-icon-box' 
+            style_class: 'app-pinner-icon-box',
+            y_expand: true
         });
 
         const iconButton = new St.Button({
             child: new St.Icon({ 
                 gicon: app.get_icon(),
-                icon_size: iconSize
+                icon_size: this._settings.get_int('icon-size')
             }),
             style_class: 'app-pinner-icon',
             reactive: true

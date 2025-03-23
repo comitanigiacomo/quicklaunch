@@ -124,18 +124,26 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
     _buildAppearancePage(page, settings) {
         const group = new Adw.PreferencesGroup();
 
-        // Dimensione icone
-        const sizeRow = new Adw.SpinRow({
-            title: 'Icon Size',
+        // Dimensioni icone 1-9 (16-24px)
+        const iconSizeRow = new Adw.SpinRow({
+            title: 'Icon Size (1-9)',
             adjustment: new Gtk.Adjustment({
-                value: settings.get_int('icon-size'),
-                lower: 16,
-                upper: 48,
+                value: Math.max(1, Math.min(9, settings.get_int('icon-size') - 15)),
+                lower: 1,
+                upper: 9,
                 step_increment: 1
             })
         });
-        settings.bind('icon-size', sizeRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-        group.add(sizeRow);
+
+        settings.connect('changed::icon-size', () => {
+            iconSizeRow.value = settings.get_int('icon-size') - 15;
+        });
+
+        iconSizeRow.connect('notify::value', () => {
+            settings.set_int('icon-size', iconSizeRow.value + 15);
+        });
+
+        group.add(iconSizeRow);
 
         // Posizione
         const positionRow = new Adw.ComboRow({

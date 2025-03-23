@@ -12,17 +12,18 @@
 ## ✨ Key Features
 
 ### ✅ Current Features
-- **Visual application pinning** directly from the GNOME app menu
-- **Integrated GUI** for managing shortcuts and pinned apps
-- **Instant search** across installed applications
-- **Automatic settings reload** after any changes made
+- **Visual application pinning**: *directly from the GNOME app menu*
+- **Integrated GUI**: *for managing shortcuts and pinned apps*
+- **Instant search**: *across installed applications*
+- **Automatic settings reload**: *after any changes made*
+- **Customizable icon size**: *Adjust the size of icons to your preference*
 
 ### 🚧 Upcoming Features
-- Drag & drop support for icon rearrangement
-- Advanced customization options (icon sizes, spacing, etc.)
-- Support for custom launchers (URLs, terminal commands)
-- Alternative icon themes
-- Multi-monitor support
+- **Drag & drop support**: *for icon rearrangement*
+- **Advanced customization options**: *(spacing, etc.)*
+- **Support for custom launchers**: *(URLs, terminal commands)*
+- **Alternative icon themes**
+- **Multi-monitor support**
 
 ## 📥 Installation
 

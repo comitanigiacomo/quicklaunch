@@ -1,104 +1,141 @@
 import GObject from 'gi://GObject';
-import Gtk from 'gi://Gtk';
+import Gtk from 'gi://Gtk?version=4.0';
+import Adw from 'gi://Adw?version=1';
 import Gio from 'gi://Gio';
-import Adw from 'gi://Adw';
 
-const AppPinnerPrefs = GObject.registerClass(
-class AppPinnerPrefs extends Adw.PreferencesPage {
-    _init(settings) {
-        super._init();
+export default class AppPinnerPrefs extends Adw.PreferencesPage {
+    static {
+        GObject.registerClass(this);
+    }
+
+    constructor(settings) {
+        super({
+            title: 'Quick Launch Settings',
+            icon_name: 'pan-start-symbolic'
+        });
+
         this.settings = settings;
         this._buildUI();
     }
 
     _buildUI() {
-        let box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10 });
+        // Rimuovi il contenuto esistente
+        const existingChild = this.get_child();
+        if (existingChild) this.remove(existingChild);
 
-        let store = new Gtk.ListStore();
-        store.set_column_types([GObject.TYPE_STRING]);
+        // Main container
+        const mainBox = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            margin_top: 12,
+            margin_bottom: 12,
+            margin_start: 12,
+            margin_end: 12,
+            spacing: 12
+        });
 
-        let treeView = new Gtk.TreeView({ model: store });
-        let renderer = new Gtk.CellRendererText();
-        let column = new Gtk.TreeViewColumn({ title: 'Application', renderer, text: 0 });
+        // Lista applicazioni
+        this.listStore = new Gtk.StringList();
+        this._refreshList();
 
-        treeView.append_column(column);
-        box.append(treeView);
+        // ListView
+        const selectionModel = new Gtk.SingleSelection({ model: this.listStore });
+        this.listView = new Gtk.ListView({
+            model: selectionModel,
+            show_separators: true,
+            factory: new Gtk.SignalListItemFactory({
+                setup: (_, listItem) => {
+                    listItem.set_child(new Gtk.Label({
+                        xalign: 0,
+                        margin_start: 8
+                    }));
+                },
+                bind: (_, listItem) => {
+                    const label = listItem.get_child();
+                    const item = listItem.get_item();
+                    label.label = item.string;
+                }
+            })
+        });
 
-        let buttonBox = new Gtk.Box({ spacing: 10 });
-        let addButton = new Gtk.Button({ label: 'Add App' });
-        let removeButton = new Gtk.Button({ label: 'Remove Selected' });
+        // Pulsanti
+        const buttonBox = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 6,
+            halign: Gtk.Align.END
+        });
+
+        const addButton = new Gtk.Button({
+            icon_name: 'list-add-symbolic',
+            tooltip_text: 'Add Application'
+        });
+
+        const removeButton = new Gtk.Button({
+            icon_name: 'list-remove-symbolic',
+            tooltip_text: 'Remove Selected',
+            sensitive: false
+        });
+
+        // Aggiorna stato pulsante rimozione
+        selectionModel.connect('selection-changed', () => {
+            removeButton.sensitive = selectionModel.get_selected() !== Gtk.INVALID_LIST_POSITION;
+        });
 
         buttonBox.append(addButton);
         buttonBox.append(removeButton);
-        box.append(buttonBox);
 
-        this.append(box);
-
-        addButton.connect('clicked', () => this._onAddApp(store));
-        removeButton.connect('clicked', () => this._onRemoveApp(store));
-
-        this._loadApps(store);
-    }
-
-    _loadApps(store) {
-        store.clear();
-        let apps = this.settings.get_strv('pinned-apps');
-        apps.forEach(app => {
-            let iter = store.append();
-            store.set(iter, [0], [app]);
-        });
-    }
-
-    _onAddApp(store) {
-        let chooser = new Gtk.FileChooserDialog({
-            title: 'Select an Application',
-            action: Gtk.FileChooserAction.OPEN,
-            transient_for: this.get_root(),
-            modal: true,
+        // Assemblaggio
+        const scrolledWindow = new Gtk.ScrolledWindow({
+            height_request: 200,
+            child: this.listView
         });
 
-        chooser.add_button('Cancel', Gtk.ResponseType.CANCEL);
-        chooser.add_button('Open', Gtk.ResponseType.OK);
+        mainBox.append(scrolledWindow);
+        mainBox.append(buttonBox);
+        this.set_child(mainBox);
 
-        chooser.connect('response', (dialog, response) => {
-            if (response === Gtk.ResponseType.OK) {
-                let file = dialog.get_file();
-                if (file) {
-                    let path = file.get_path();
-                    let appId = path.split('/').pop();
-                    let iter = store.append();
-                    store.set(iter, [0], [appId]);
-
-                    let apps = this.settings.get_strv('pinned-apps');
-                    apps.push(appId);
-                    this.settings.set_strv('pinned-apps', apps);
-                }
-            }
-            dialog.destroy();
-        });
-
-        chooser.show();
+        // Connessioni pulsanti
+        addButton.connect('clicked', () => this._onAddApp());
+        removeButton.connect('clicked', () => this._onRemoveApp(selectionModel));
     }
 
-    _onRemoveApp(store) {
-        let [hasSelection, model, iter] = store.get_selection().get_selected();
-        if (hasSelection) {
-            let value = model.get_value(iter, 0);
-            model.remove(iter);
+    _refreshList() {
+        this.listStore.splice(0, this.listStore.get_n_items(), 
+            this.settings.get_strv('pinned-apps'));
+    }
 
-            let apps = this.settings.get_strv('pinned-apps');
-            let index = apps.indexOf(value);
-            if (index > -1) {
-                apps.splice(index, 1);
+    async _onAddApp() {
+        const fileDialog = new Gtk.FileDialog();
+        fileDialog.title = 'Select Application';
+        fileDialog.modal = true;
+
+        // Filtro per file .desktop
+        const filter = new Gtk.FileFilter();
+        filter.add_pattern('*.desktop');
+        fileDialog.set_filters([filter]);
+
+        try {
+            const file = await fileDialog.open(this.get_root());
+            const path = file.get_path();
+            const appId = path.split('/').pop().replace('.desktop', '');
+            
+            const apps = this.settings.get_strv('pinned-apps');
+            if (!apps.includes(appId)) {
+                apps.push(appId);
                 this.settings.set_strv('pinned-apps', apps);
+                this._refreshList();
             }
+        } catch (error) {
+            logError(error, 'Error selecting application');
         }
     }
-});
 
-export function init() {}
-
-export function buildPrefsWidget() {
-    let settings = new Gio.Settings({ schema_id: 'org.gnome.shell.extensions.app-pinner' });
-    return new AppPinnerPrefs(settings);
+    _onRemoveApp(selectionModel) {
+        const position = selectionModel.get_selected();
+        if (position !== Gtk.INVALID_LIST_POSITION) {
+            const apps = this.settings.get_strv('pinned-apps');
+            apps.splice(position, 1);
+            this.settings.set_strv('pinned-apps', apps);
+            this._refreshList();
+        }
+    }
 }

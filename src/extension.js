@@ -156,9 +156,8 @@ class AppPinner extends PanelMenu.Button {
             item.add_child(icon);
             item.label.x_expand = true;
             
-            // Apre l'applicazione e la pinna
+            // Modificato: Solo pinna l'app senza aprirla
             item.connect('activate', () => {
-                Util.spawn(app.get_commandline().split(' '));
                 this._pinApp(app);
                 this._searchInput.set_text('');
                 this._updateSearch();
@@ -193,6 +192,7 @@ class AppPinner extends PanelMenu.Button {
             can_focus: false
         });
 
+        // Mantenuto: Apre l'app al click
         icon.connect('clicked', () => {
             Util.spawn(app.get_commandline().split(' '));
             this.menu.close();
@@ -213,7 +213,7 @@ class AppPinner extends PanelMenu.Button {
         item.insert_child_at_index(icon, 0);
         item.label.x_expand = true;
 
-        // Apre l'applicazione cliccando su qualsiasi parte della riga
+        // Mantenuto: Apre l'app al click
         item.connect('activate', () => {
             Util.spawn(app.get_commandline().split(' '));
             this.menu.close();

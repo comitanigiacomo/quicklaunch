@@ -20,8 +20,10 @@ class AppPinner extends PanelMenu.Button {
         this._mainContainer = new St.BoxLayout({
             style_class: 'app-pinner-container',
             vertical: false,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
             x_expand: true,
-            y_expand: true
+            y_expand: true // Importante per l'altezza
         });
         this.add_child(this._mainContainer);
 
@@ -36,9 +38,11 @@ class AppPinner extends PanelMenu.Button {
         // Contenitore icone pinnate
         this._pinnedIconsBox = new St.BoxLayout({
             style_class: 'app-pinner-icons',
-            vertical: false,
-            x_expand: true,
-            y_expand: true
+            vertical: false, // Layout orizzontale
+            x_align: Clutter.ActorAlign.CENTER, // Centra ORIZZONTALMENTE
+            y_align: Clutter.ActorAlign.CENTER, // Centra VERTICALMENTE
+            x_expand: true,   // Occupa tutta la larghezza
+            y_expand: true    // Occupa tutta l'altezza
         });
         this._mainContainer.add_child(this._pinnedIconsBox);
 

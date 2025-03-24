@@ -1,26 +1,7 @@
-.app-pinner-container {
-    padding: 0 4px;
-    margin: 6px;
-}
-
-.app-pinner-icons {
-    margin: 6px;
-}
-
-.app-pinner-icon {
-    padding: 2px;
-    -natural-hpadding: 0;
-    -minimum-hpadding: 0;
-    transition: transform 0.2s ease-in-out;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background-color: transparent;
-}
-
 .app-pinner-icon:hover {
     transform: scale(1.15);
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: rgba(91, 91, 91, 0.15);
+    border-radius: 50px;
 }
 
 .app-pinner-remove-btn {
@@ -30,13 +11,13 @@
     min-height: 18px;
     padding: 2px;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: right;
+    justify-content: right;
     transition: background-color 0.2s ease-in-out;
 }
 
 .app-pinner-remove-label {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     color: white;
     text-align: center;
@@ -44,31 +25,13 @@
 
 .app-pinner-remove-btn:hover {
     background-color: rgba(255, 0, 0, 0.8);
-}
-
-.popup-menu-item StIcon {
-    font-size: 24px;
-    margin-right: 12px;
+    border-radius: 50px;
 }
 
 .app-pinner-container:hover {
     background-color: transparent !important;
 }
-.app-pinner-icons StIcon {
-    font-size: 28px;
-    min-width: 28px;
-    min-height: 28px;
-}
 
-.app-pinner-container {
-    margin: 8px;
-    padding: 0 4px;
-    margin: 0;
-}
-
-.app-pinner-icons {
-    -st-box-layout: horizontal;
-}
 
 .search-box {
     width: 100%;

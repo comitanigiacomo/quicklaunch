@@ -128,7 +128,7 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         const iconSizeRow = new Adw.SpinRow({
             title: 'Icon Size (1-9)',
             adjustment: new Gtk.Adjustment({
-                value: Math.max(1, Math.min(9, settings.get_int('icon-size') - 15)),
+                value: settings.get_int('icon-size'),
                 lower: 1,
                 upper: 9,
                 step_increment: 1
@@ -160,7 +160,7 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
             adjustment: new Gtk.Adjustment({
                 value: settings.get_int('spacing'),
                 lower: 0,
-                upper: 24,
+                upper: 10,
                 step_increment: 1
             })
         });

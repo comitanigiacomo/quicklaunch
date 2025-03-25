@@ -40,11 +40,12 @@ class AppPinner extends PanelMenu.Button {
             style_class: 'app-pinner-icons',
             vertical: false, // Layout orizzontale
             x_align: Clutter.ActorAlign.CENTER, // Centra ORIZZONTALMENTE
-            y_align: Clutter.ActorAlign.CENTER, // Centra VERTICALMENTE
             x_expand: true,   // Occupa tutta la larghezza
             y_expand: true    // Occupa tutta l'altezza
         });
         this._mainContainer.add_child(this._pinnedIconsBox);
+
+        this._updateIconsSpacing();
 
         // Connessioni impostazioni
         this._settingsHandler = [
@@ -53,7 +54,8 @@ class AppPinner extends PanelMenu.Button {
                 this._mainContainer.x_align = this._getPanelPosition();
             }),
             this._settings.connect('changed::spacing', () => {
-                this._pinnedIconsBox.spacing = this._settings.get_int('spacing');
+                this._updateIconsSpacing();
+                this._pinnedIconsBox.queue_relayout();
             }),
             this._settings.connect('changed::enable-labels', () => this._refreshUI()),
             this._settings.connect('changed::pinned-apps', () => this._refreshUI())
@@ -61,6 +63,11 @@ class AppPinner extends PanelMenu.Button {
 
         this._buildMenu();
         this._refreshUI();
+    }
+
+    _updateIconsSpacing() {
+        const spacing = Math.min(20, Math.max(0, this._settings.get_int('spacing')));
+        this._pinnedIconsBox.set_style(`spacing: ${spacing}px;`);
     }
 
     _getPanelPosition() {

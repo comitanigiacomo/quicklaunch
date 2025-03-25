@@ -78,12 +78,15 @@ class AppPinner extends PanelMenu.Button {
         const searchEntry = new PopupMenu.PopupBaseMenuItem();
         const searchBox = new St.BoxLayout({
             vertical: false,
-            style_class: 'search-box'
+            style_class: 'search-box',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL
         });
         
         this._searchInput = new St.Entry({
             hint_text: _('Search applications...'),
-            can_focus: true
+            can_focus: true,
+            x_expand: true
         });
         
         searchBox.add_child(this._searchInput);
@@ -218,7 +221,9 @@ class AppPinner extends PanelMenu.Button {
                 icon_size: this._settings.get_int('icon-size')
             }),
             style_class: 'app-pinner-icon',
-            reactive: true
+            reactive: true,
+            hover: true,
+            track_hover: true
         });
 
         iconButton.connect('clicked', () => {
@@ -254,6 +259,10 @@ class AppPinner extends PanelMenu.Button {
             icon_size: this._settings.get_int('icon-size')
         });
         item.insert_child_at_index(icon, 0);
+
+        // Aggiungi uno spacer per spingere il pulsante di rimozione a destra
+        const spacer = new St.BoxLayout({ x_expand: true });
+        item.actor.add_child(spacer);
 
         // Pulsante rimozione
         const removeBtn = new St.Button({

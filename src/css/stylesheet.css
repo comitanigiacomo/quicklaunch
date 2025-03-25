@@ -1,7 +1,12 @@
 .app-pinner-icon:hover {
-    transform: scale(1.15);
-    background-color: rgba(91, 91, 91, 0.15);
-    border-radius: 50px;
+    background-color: rgba(139, 139, 139, 0.2) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+    border-radius: 8px;
+}
+
+.app-pinner-icon:active {
+    transform: translateY(0) scale(0.95) !important;
+    transition-duration: 0.1s !important;
 }
 
 .app-pinner-remove-btn {

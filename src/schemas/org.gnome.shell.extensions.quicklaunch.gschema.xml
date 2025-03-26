@@ -19,6 +19,7 @@
       <default>'right'</default>
       <choices>
         <choice value='left'/>
+        <choice value="center"/>
         <choice value='right'/>
       </choices>
       <summary>Panel position</summary>

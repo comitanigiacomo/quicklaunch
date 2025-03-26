@@ -140,16 +140,16 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         // Posizione
         const positionRow = new Adw.ComboRow({
             title: 'Panel Position',
-            model: new Gtk.StringList({ strings: ['left', 'right'] })
+            model: new Gtk.StringList({ strings: ['left', 'center', 'right'] })
         });
-
-        const currentPos = settings.get_string('position-in-panel');
-        positionRow.selected = currentPos === 'left' ? 0 : 1;
 
         positionRow.connect('notify::selected', () => {
             const selectedString = positionRow.model.get_string(positionRow.selected);
             settings.set_string('position-in-panel', selectedString);
         });
+
+        const currentPos = settings.get_string('position-in-panel');
+        positionRow.selected = ['left', 'center', 'right'].indexOf(currentPos);
 
         group.add(positionRow);
 

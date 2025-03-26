@@ -68,7 +68,12 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _getPanelPosition() {
-        return Clutter.ActorAlign.FILL; // Occupa tutto lo spazio disponibile
+        const position = this._settings.get_string('position-in-panel');
+        return {
+            left: Clutter.ActorAlign.START,
+            center: Clutter.ActorAlign.CENTER,
+            right: Clutter.ActorAlign.END
+        }[position] || Clutter.ActorAlign.FILL;
     }
 
     _buildMenu() {
@@ -370,36 +375,52 @@ export default class AppPinnerExtension extends Extension {
             this._indicator.destroy();
             this._indicator = null;
         }
-
+    
         this._indicator = new AppPinner(this._settings);
         const position = this._settings.get_string('position-in-panel');
-
-        // Rimuovi da tutti i contenitori esistenti
+        
+        // Rimuovi da eventuali contenitori precedenti
         if (this._indicator.get_parent()) {
             this._indicator.get_parent().remove_child(this._indicator);
         }
-        
-        // Aggiungi al contenitore corretto
-        if (position === 'left') {
-            // Posizione estrema sinistra (prima del pulsante Activities)
-            Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
-        } else {
-            // Posizione a destra DOPO l'orologio e PRIMA degli indicatori di sistema
-            const dateMenu = Main.panel.statusArea?.dateMenu;
-            let targetIndex = 0;
     
-            if (dateMenu && dateMenu.actor) {
-                const children = Main.panel._rightBox.get_children();
-                const dateMenuIndex = children.indexOf(dateMenu.actor);
-                targetIndex = dateMenuIndex !== -1 ? dateMenuIndex + 1 : 0;
-            }
-    
-            Main.panel._rightBox.insert_child_at_index(this._indicator, targetIndex);
+        switch(position) {
+            case 'left':
+                Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
+                break;
+                
+            case 'center':
+                // Posizione centrale tra left e right
+                if (Main.panel._centerBox) {
+                    Main.panel._centerBox.add_child(this._indicator);
+                } else {
+                    // Fallback per vecchie versioni GNOME
+                    Main.panel._centerBox = new St.BoxLayout();
+                    Main.panel._centerBox.x_align = Clutter.ActorAlign.CENTER;
+                    Main.panel.insert_child_at_index(Main.panel._centerBox, 1);
+                    Main.panel._centerBox.add_child(this._indicator);
+                }
+                break;
+                
+            case 'right':
+                const dateMenu = Main.panel.statusArea?.dateMenu;
+                let targetIndex = 0;
+                if (dateMenu?.actor) {
+                    const children = Main.panel._rightBox.get_children();
+                    const dateMenuIndex = children.indexOf(dateMenu.actor);
+                    targetIndex = dateMenuIndex !== -1 ? dateMenuIndex + 1 : 0;
+                }
+                Main.panel._rightBox.insert_child_at_index(this._indicator, targetIndex);
+                break;
         }
     
-        // Forza il ridisegno
+        // Stile dinamico
+        this._indicator.set_style_class_name(
+            `app-pinner-position-${position}`
+        );
+    
         Main.panel.queue_relayout();
-        }
+    }
 
     disable() {
         if (this._positionHandler) {

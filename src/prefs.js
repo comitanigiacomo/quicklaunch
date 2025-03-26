@@ -126,32 +126,31 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
 
         // Dimensioni icone 1-9 (16-24px)
         const iconSizeRow = new Adw.SpinRow({
-            title: 'Icon Size (1-9)',
+            title: 'Icon Size (px)',
             adjustment: new Gtk.Adjustment({
                 value: settings.get_int('icon-size'),
-                lower: 1,
-                upper: 9,
+                lower: 16,
+                upper: 24,
                 step_increment: 1
             })
         });
-
-        settings.connect('changed::icon-size', () => {
-            iconSizeRow.value = settings.get_int('icon-size') - 15;
-        });
-
-        iconSizeRow.connect('notify::value', () => {
-            settings.set_int('icon-size', iconSizeRow.value + 15);
-        });
-
+        settings.bind('icon-size', iconSizeRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         group.add(iconSizeRow);
 
         // Posizione
         const positionRow = new Adw.ComboRow({
             title: 'Panel Position',
-            model: new Gtk.StringList({ strings: ['Left', 'Center', 'Right'] })
+            model: new Gtk.StringList({ strings: ['left', 'right'] })
         });
-        settings.bind('position-in-panel', positionRow, 'selected', 
-            Gio.SettingsBindFlags.DEFAULT);
+
+        const currentPos = settings.get_string('position-in-panel');
+        positionRow.selected = currentPos === 'left' ? 0 : 1;
+
+        positionRow.connect('notify::selected', () => {
+            const selectedString = positionRow.model.get_string(positionRow.selected);
+            settings.set_string('position-in-panel', selectedString);
+        });
+
         group.add(positionRow);
 
         // Spaziatura

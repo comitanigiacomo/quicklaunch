@@ -16,13 +16,13 @@
     </key>
 
     <key name="position-in-panel" type="s">
-      <default>'left'</default>
+      <default>'right'</default>
       <choices>
         <choice value='left'/>
-        <choice value='center'/>
         <choice value='right'/>
       </choices>
       <summary>Panel position</summary>
+      <description>Posizione nella barra superiore</description>
     </key>
 
     <key name="spacing" type="i">

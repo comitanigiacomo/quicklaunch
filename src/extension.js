@@ -50,9 +50,6 @@ class AppPinner extends PanelMenu.Button {
         // Connessioni impostazioni
         this._settingsHandler = [
             this._settings.connect('changed::icon-size', () => this._refreshUI()),
-            this._settings.connect('changed::position-in-panel', () => {
-                this._mainContainer.x_align = this._getPanelPosition();
-            }),
             this._settings.connect('changed::spacing', () => {
                 this._updateIconsSpacing();
                 this._pinnedIconsBox.queue_relayout();
@@ -71,11 +68,7 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _getPanelPosition() {
-        switch (this._settings.get_string('position-in-panel')) {
-            case 'Left': return Clutter.ActorAlign.START;
-            case 'Right': return Clutter.ActorAlign.END;
-            default: return Clutter.ActorAlign.CENTER;
-        }
+        return Clutter.ActorAlign.FILL; // Occupa tutto lo spazio disponibile
     }
 
     _buildMenu() {
@@ -338,20 +331,92 @@ export default class AppPinnerExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         
-        // Inizializza app predefinite se necessario
-        const pinnedApps = this._settings.get_strv('pinned-apps');
-        if (pinnedApps.length === 0) {
-            const defaultApps = this._settings.get_strv('default-apps')
-                .map(app => app.replace('.desktop', ''));
-            this._settings.set_strv('pinned-apps', defaultApps);
+        // Verifica valori iniziali
+        this._validateSettings();
+        
+        this._positionHandler = this._settings.connect(
+            'changed::position-in-panel',
+            () => this._safeRecreateIndicator()
+        );
+        
+        this._safeRecreateIndicator();
+    }
+
+    _validateSettings() {
+        // Reset valori corrotti
+        const currentPos = this._settings.get_string('position-in-panel');
+        if (!['left', 'right'].includes(currentPos)) {
+            this._settings.set_string('position-in-panel', 'right');
+        }
+    }
+
+    _safeRecreateIndicator() {
+        // Salva stato corrente
+        const iconSize = this._settings.get_int('icon-size');
+        const spacing = this._settings.get_int('spacing');
+        const labels = this._settings.get_boolean('enable-labels');
+
+        // Ricrea indicatore
+        this._recreateIndicator();
+
+        // Ripristina impostazioni
+        this._settings.set_int('icon-size', iconSize);
+        this._settings.set_int('spacing', spacing);
+        this._settings.set_boolean('enable-labels', labels);
+    }
+
+    _recreateIndicator() {
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
         }
 
         this._indicator = new AppPinner(this._settings);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
-    }
+        const position = this._settings.get_string('position-in-panel');
+
+        // Rimuovi da tutti i contenitori esistenti
+        if (this._indicator.get_parent()) {
+            this._indicator.get_parent().remove_child(this._indicator);
+        }
+        
+        // Aggiungi al contenitore corretto
+        if (position === 'left') {
+            // Posizione estrema sinistra (prima del pulsante Activities)
+            Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
+        } else {
+            // Posizione a destra DOPO l'orologio e PRIMA degli indicatori di sistema
+            const dateMenu = Main.panel.statusArea?.dateMenu;
+            let targetIndex = 0;
+    
+            if (dateMenu && dateMenu.actor) {
+                const children = Main.panel._rightBox.get_children();
+                const dateMenuIndex = children.indexOf(dateMenu.actor);
+                targetIndex = dateMenuIndex !== -1 ? dateMenuIndex + 1 : 0;
+            }
+    
+            Main.panel._rightBox.insert_child_at_index(this._indicator, targetIndex);
+        }
+    
+        // Forza il ridisegno
+        Main.panel.queue_relayout();
+        }
 
     disable() {
-        this._indicator?.destroy();
-        this._indicator = null;
+        if (this._positionHandler) {
+            this._settings.disconnect(this._positionHandler);
+            this._positionHandler = null;
+        }
+        
+        if (this._indicator) {
+            // Rimuovi esplicitamente dal contenitore
+            const parent = this._indicator.get_parent();
+            if (parent) {
+                parent.remove_child(this._indicator);
+            }
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+        
+        Util.garbageCollect();
     }
 }

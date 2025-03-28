@@ -18,12 +18,12 @@ class AppPinner extends PanelMenu.Button {
 
         // Contenitore principale
         this._mainContainer = new St.BoxLayout({
-            style_class: 'app-pinner-container',
+            style_class: 'panel-button',
             vertical: false,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
-            y_expand: true // Importante per l'altezza
+            reactive: true,
+            track_hover: true
         });
         this.add_child(this._mainContainer);
 
@@ -40,6 +40,7 @@ class AppPinner extends PanelMenu.Button {
             style_class: 'app-pinner-icons',
             vertical: false, // Layout orizzontale
             x_align: Clutter.ActorAlign.CENTER, // Centra ORIZZONTALMENTE
+            y_align: Clutter.ActorAlign.CENTER,
             x_expand: true,   // Occupa tutta la larghezza
             y_expand: true    // Occupa tutta l'altezza
         });
@@ -57,6 +58,14 @@ class AppPinner extends PanelMenu.Button {
             this._settings.connect('changed::enable-labels', () => this._refreshUI()),
             this._settings.connect('changed::pinned-apps', () => this._refreshUI())
         ];
+
+        this.menu.actor.connect('button-press-event', (actor, event) => {
+            const target = event.get_source();
+            // Chiudi solo se il click è FUORI dal menu
+            if (!this.menu.actor.contains(target)) {
+                this.menu.close();
+            }
+        });
 
         this._buildMenu();
         this._refreshUI();
@@ -144,12 +153,28 @@ class AppPinner extends PanelMenu.Button {
             
             item.connect('activate', () => {
                 this._pinApp(app);
-                app.launch();
-                this._searchInput.set_text('');
-                this._updateSearch();
+    
+            // 1. Resetta la ricerca PRIMA di lanciare l'app
+            this._searchInput.set_text('');
+            this._updateSearch();
+            
+            // 2. Chiudi il menu dopo aver aggiornato l'UI
+            this.menu.close();
+            
+            // 3. Lancia l'applicazione
+            app.launch();
             });
             
             this._resultsSection.box.add_child(item);
+        });
+
+        this.menu.actor.show_all();
+        this.menu.actor.queue_redraw();
+        
+        // Aggiorna il layout
+        Clutter.Threads.add_timeout(0, () => {
+            this.menu.queue_relayout();
+            return GLib.SOURCE_REMOVE;
         });
     }
 
@@ -420,6 +445,7 @@ export default class AppPinnerExtension extends Extension {
         );
     
         Main.panel.queue_relayout();
+        Main.panel.menuManager.addMenu(this._indicator.menu);
     }
 
     disable() {

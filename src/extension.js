@@ -15,12 +15,6 @@ class AppPinner extends PanelMenu.Button {
         super._init(0.0, _('App Pinner'));
         this._settings = settings;
         this._destroyed = false;
-        this._draggedIcon = null;
-        this._dragStartX = 0;
-        this._currentIndex = -1;
-        this._dragClone = null;
-        this._dragOriginIndex = -1;
-        this._dragOriginPosition = 0;
 
         // Contenitore principale
         this._mainContainer = new St.BoxLayout({
@@ -222,17 +216,32 @@ class AppPinner extends PanelMenu.Button {
     _refreshUI() {
         if (this._destroyed) return;
         
+        // Calcola la larghezza massima
+        const schema = this._settings.settings_schema;
+        const key = schema.get_key('icon-size');
+        const range = key.get_range();
+        const [minSize, maxIconSize] = range.deep_unpack();
+        
+        const pinnedApps = this._settings.get_strv('pinned-apps');
+        const spacing = this._settings.get_int('spacing');
+        const numApps = pinnedApps.length;
+        
+        // Calcola larghezza come se le icone fossero alla massima dimensione
+        const containerWidth = (maxIconSize * numApps) + (spacing * Math.max(0, numApps - 1));
+        
+        // Applica stili al contenitore principale
+        this._mainContainer.set_style(`
+            min-width: ${containerWidth}px;
+            padding: 0 ${spacing}px;
+        `);
+
         // Aggiorna icone pinnate
         this._pinnedIconsBox.destroy_all_children();
-        this._settings.get_strv('pinned-apps').forEach(appId => 
-            this._addPinnedIcon(appId)
-        );
+        pinnedApps.forEach(appId => this._addPinnedIcon(appId));
 
         // Aggiorna sezione menu
         this._pinnedSection.box.destroy_all_children();
-        this._settings.get_strv('pinned-apps').forEach(appId => 
-            this._addMenuPinnedItem(appId)
-        );
+        pinnedApps.forEach(appId => this._addMenuPinnedItem(appId));
     }
 
     _addPinnedIcon(appId) {
@@ -262,90 +271,64 @@ class AppPinner extends PanelMenu.Button {
             track_hover: true
         });
 
-        // Drag-and-drop handlers
+        let longPressTimeout = null;
+        let isLongPress = false;
+
         iconButton.connect('button-press-event', (actor, event) => {
-            // Crea un clone dell'icona
-            this._dragClone = new St.Icon({
-                gicon: app.get_icon(),
-                icon_size: iconSize,
-                style_class: 'app-pinner-drag-clone',
-                opacity: 200
+            longPressTimeout = setTimeout(() => {
+                isLongPress = true;
+                this._animateAndMoveToEnd(appId, iconBox);
+            }, 500); // 500ms per il long press
+
+            // Animazione di "premuto"
+            actor.ease({
+                scale_x: 0.8,
+                scale_y: 0.8,
+                duration: 200
             });
-            
-            // Posiziona il clone alle coordinate del cursore
-            const [stageX, stageY] = event.get_coords();
-            this._dragClone.set_position(stageX - iconSize/2, stageY - iconSize/2);
-            Main.uiGroup.add_child(this._dragClone);
 
-            // Memorizza la posizione originale
-            this._dragOriginIndex = this._pinnedIconsBox.get_children().indexOf(iconBox);
-            this._dragOriginPosition = iconBox.get_allocation_box().x1;
-            
-            // Nascondi l'originale durante il trascinamento
-            iconBox.opacity = 50;
-            
-            return Clutter.EVENT_STOP;
+            return Clutter.EVENT_PROPAGATE; // Modificato per permettere il click normale
         });
-
 
         iconButton.connect('button-release-event', (actor, event) => {
-            if (!this._dragClone) return Clutter.EVENT_STOP;
-        
-            try {
-                const pinnedBox = this._pinnedIconsBox.get_allocation_box();
-                if (!pinnedBox) {
-                    console.error('Impossibile ottenere la posizione del contenitore');
-                    return Clutter.EVENT_STOP;
-                }
-        
-                const [stageX] = event.get_coords();
-                const relativeX = stageX - pinnedBox.x1;
-                const children = this._pinnedIconsBox.get_children();
-                
-                // Calcola la larghezza corretta
-                const iconSize = this._settings.get_int('icon-size');
-                const spacing = this._settings.get_int('spacing');
-                const iconWidth = iconSize + spacing;
-        
-                let newIndex = Math.floor(relativeX / iconWidth);
-                newIndex = Math.max(0, Math.min(newIndex, children.length - 1));
-        
-                if (newIndex !== this._dragOriginIndex) {
-                    this._reorderIcons(this._dragOriginIndex, newIndex);
-                    this._saveNewOrder();
-                }
-            } catch (e) {
-                console.error('Errore durante il riordinamento:', e);
-            } finally {
-                iconBox.opacity = 255;
-                this._dragClone.destroy();
-                this._dragClone = null;
+            if (longPressTimeout) {
+                clearTimeout(longPressTimeout);
+                longPressTimeout = null;
             }
-            
-            return Clutter.EVENT_STOP;
-        });
 
-        iconButton.connect('motion-event', (actor, event) => {
-            if (!this._dragClone) return Clutter.EVENT_PROPAGATE;
+            // Ripristina scala
+            actor.ease({
+                scale_x: 1.0,
+                scale_y: 1.0,
+                duration: 200
+            });
 
-            // Aggiorna la posizione del clone
-            const [stageX, stageY] = event.get_coords();
-            const iconSize = this._settings.get_int('icon-size');
-            this._dragClone.set_position(
-                stageX - iconSize/2,
-                stageY - iconSize/2
-            );
-
-            return Clutter.EVENT_STOP;
+            return Clutter.EVENT_PROPAGATE;
         });
 
         iconButton.connect('clicked', () => {
-            if (this._settings.get_boolean('launch-animation')) {
-                Shell.AppSystem.get_default().lookup_app(app.get_id())?.activate();
-            } else {
-                Util.spawn(app.get_commandline().split(' '));
+            if (!isLongPress) {
+                const app = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+                if (app) {
+                    if (this._settings.get_boolean('launch-animation')) {
+                        Shell.AppSystem.get_default().lookup_app(app.get_id())?.activate();
+                    } else {
+                        Util.spawn(app.get_commandline().split(' '));
+                    }
+                }
             }
-            this.menu.close();
+            isLongPress = false; // Resetta lo stato
+        });
+
+        iconBox.opacity = 0;
+        iconBox.scale_x = 0.5;
+        iconBox.scale_y = 0.5;
+        iconBox.ease({
+            opacity: 255,
+            scale_x: 1,
+            scale_y: 1,
+            duration: 300,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD
         });
 
         if (showLabels) {
@@ -358,6 +341,49 @@ class AppPinner extends PanelMenu.Button {
         iconBox.add_child(iconButton);
         this._pinnedIconsBox.add_child(iconBox);
         iconBox.appId = appId;  // Memorizza l'ID dell'app
+    }
+
+    animateAndMoveToEnd(appId, iconBox) {
+        // Animazione avanzata con traiettoria
+        iconBox.ease({
+            scale_x: 1.5,
+            scale_y: 1.5,
+            opacity: 0,
+            rotation_angle_z: 360, // Rotazione completa
+            duration: 800,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                // Sposta l'app in fondo
+                const current = this._settings.get_strv('pinned-apps');
+                const newOrder = current.filter(id => id !== appId).concat(appId);
+                this._settings.set_strv('pinned-apps', newOrder);
+                
+                // Animazione di riapparizione
+                this._refreshUIWithEffect();
+            }
+        });
+    }
+
+    _refreshUIWithEffect() {
+        // Distruggi le icone con animazione
+        this._pinnedIconsBox.get_children().forEach((child, index) => {
+            child.ease({
+                opacity: 0,
+                scale_x: 0.5,
+                scale_y: 0.5,
+                duration: 300,
+                delay: index * 30,
+                onComplete: () => child.destroy()
+            });
+        });
+
+        // Ricrea le icone con nuova animazione
+        Clutter.Threads.add_timeout(300, () => {
+            this._settings.get_strv('pinned-apps').forEach(appId => 
+                this._addPinnedIcon(appId)
+            );
+            return GLib.SOURCE_REMOVE;
+        });
     }
     
     _calculateNewPosition(delta) {
@@ -396,6 +422,31 @@ class AppPinner extends PanelMenu.Button {
         } catch (e) {
             console.error('Errore nel salvataggio delle impostazioni:', e);
         }
+    }
+
+    _animateAndMoveToEnd(appId, iconBox) {
+        // Animazione di "sollevamento" e dissolvenza
+        iconBox.ease({
+            scale_x: 1.2,
+            scale_y: 1.2,
+            opacity: 0,
+            duration: 300,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                // Sposta l'app in ultima posizione
+                const current = this._settings.get_strv('pinned-apps');
+                const index = current.indexOf(appId);
+                if (index === -1) return;
+                
+                const newOrder = [
+                    ...current.slice(0, index),
+                    ...current.slice(index + 1),
+                    current[index]
+                ];
+                
+                this._settings.set_strv('pinned-apps', newOrder);
+            }
+        });
     }
 
     _addMenuPinnedItem(appId) {

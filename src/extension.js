@@ -15,6 +15,12 @@ class AppPinner extends PanelMenu.Button {
         super._init(0.0, _('App Pinner'));
         this._settings = settings;
         this._destroyed = false;
+        this._draggedIcon = null;
+        this._dragStartX = 0;
+        this._currentIndex = -1;
+        this._dragClone = null;
+        this._dragOriginIndex = -1;
+        this._dragOriginPosition = 0;
 
         // Contenitore principale
         this._mainContainer = new St.BoxLayout({
@@ -256,6 +262,83 @@ class AppPinner extends PanelMenu.Button {
             track_hover: true
         });
 
+        // Drag-and-drop handlers
+        iconButton.connect('button-press-event', (actor, event) => {
+            // Crea un clone dell'icona
+            this._dragClone = new St.Icon({
+                gicon: app.get_icon(),
+                icon_size: iconSize,
+                style_class: 'app-pinner-drag-clone',
+                opacity: 200
+            });
+            
+            // Posiziona il clone alle coordinate del cursore
+            const [stageX, stageY] = event.get_coords();
+            this._dragClone.set_position(stageX - iconSize/2, stageY - iconSize/2);
+            Main.uiGroup.add_child(this._dragClone);
+
+            // Memorizza la posizione originale
+            this._dragOriginIndex = this._pinnedIconsBox.get_children().indexOf(iconBox);
+            this._dragOriginPosition = iconBox.get_allocation_box().x1;
+            
+            // Nascondi l'originale durante il trascinamento
+            iconBox.opacity = 50;
+            
+            return Clutter.EVENT_STOP;
+        });
+
+
+        iconButton.connect('button-release-event', (actor, event) => {
+            if (!this._dragClone) return Clutter.EVENT_STOP;
+        
+            try {
+                const pinnedBox = this._pinnedIconsBox.get_allocation_box();
+                if (!pinnedBox) {
+                    console.error('Impossibile ottenere la posizione del contenitore');
+                    return Clutter.EVENT_STOP;
+                }
+        
+                const [stageX] = event.get_coords();
+                const relativeX = stageX - pinnedBox.x1;
+                const children = this._pinnedIconsBox.get_children();
+                
+                // Calcola la larghezza corretta
+                const iconSize = this._settings.get_int('icon-size');
+                const spacing = this._settings.get_int('spacing');
+                const iconWidth = iconSize + spacing;
+        
+                let newIndex = Math.floor(relativeX / iconWidth);
+                newIndex = Math.max(0, Math.min(newIndex, children.length - 1));
+        
+                if (newIndex !== this._dragOriginIndex) {
+                    this._reorderIcons(this._dragOriginIndex, newIndex);
+                    this._saveNewOrder();
+                }
+            } catch (e) {
+                console.error('Errore durante il riordinamento:', e);
+            } finally {
+                iconBox.opacity = 255;
+                this._dragClone.destroy();
+                this._dragClone = null;
+            }
+            
+            return Clutter.EVENT_STOP;
+        });
+
+        iconButton.connect('motion-event', (actor, event) => {
+            if (!this._dragClone) return Clutter.EVENT_PROPAGATE;
+
+            // Aggiorna la posizione del clone
+            const [stageX, stageY] = event.get_coords();
+            const iconSize = this._settings.get_int('icon-size');
+            this._dragClone.set_position(
+                stageX - iconSize/2,
+                stageY - iconSize/2
+            );
+
+            return Clutter.EVENT_STOP;
+        });
+
         iconButton.connect('clicked', () => {
             if (this._settings.get_boolean('launch-animation')) {
                 Shell.AppSystem.get_default().lookup_app(app.get_id())?.activate();
@@ -274,6 +357,45 @@ class AppPinner extends PanelMenu.Button {
 
         iconBox.add_child(iconButton);
         this._pinnedIconsBox.add_child(iconBox);
+        iconBox.appId = appId;  // Memorizza l'ID dell'app
+    }
+    
+    _calculateNewPosition(delta) {
+        const children = this._pinnedIconsBox.get_children();
+        const spacing = this._settings.get_int('spacing');
+        const iconWidth = this._settings.get_int('icon-size') + spacing;
+        return Math.min(
+            children.length - 1,
+            Math.max(0, this._currentIndex + Math.round(delta / iconWidth))
+        );
+    }
+    
+    _reorderIcons(oldIndex, newIndex) {
+        if (oldIndex === newIndex) return;
+        
+        const children = this._pinnedIconsBox.get_children();
+        if (oldIndex < 0 || oldIndex >= children.length || newIndex < 0 || newIndex >= children.length) {
+            console.error('Indici non validi per il riordinamento:', oldIndex, newIndex);
+            return;
+        }
+    
+        const item = children[oldIndex];
+        this._pinnedIconsBox.remove_child(item);
+        this._pinnedIconsBox.insert_child_at_index(item, newIndex);
+    }
+
+    _saveNewOrder() {
+        const newOrder = this._pinnedIconsBox.get_children()
+            .map(child => child.appId)
+            .filter(id => id && typeof id === 'string');
+    
+        if (arraysEqual(newOrder, this._settings.get_strv('pinned-apps'))) return;
+    
+        try {
+            this._settings.set_strv('pinned-apps', newOrder);
+        } catch (e) {
+            console.error('Errore nel salvataggio delle impostazioni:', e);
+        }
     }
 
     _addMenuPinnedItem(appId) {
@@ -356,6 +478,10 @@ class AppPinner extends PanelMenu.Button {
         super.destroy();
     }
 });
+
+function arraysEqual(a, b) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+}
 
 export default class AppPinnerExtension extends Extension {
     enable() {

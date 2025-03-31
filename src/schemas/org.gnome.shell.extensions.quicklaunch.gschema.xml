@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.app-pinner" path="/org/gnome/shell/extensions/app-pinner/">
+
+    <key name="custom-keybindings" type="as">
+      <default>[]</default>
+      <summary>Custom keybindings paths</summary>
+    </key>
     
     <!-- Applicazioni Pinnate -->
     <key name="pinned-apps" type="as">
@@ -53,6 +58,48 @@
     <key name="default-apps" type="as">
       <default>['org.gnome.Calculator.desktop']</default>
       <summary>Default suggested apps</summary>
+    </key>
+
+    <!-- Scorciatoie da tastiera -->
+    <key name="shortcut-1" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 1</summary>
+    </key>
+    <key name="shortcut-2" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 2</summary>
+    </key>
+    <key name="shortcut-3" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 3</summary>
+    </key>
+    <key name="shortcut-4" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 4</summary>
+    </key>
+    <key name="shortcut-5" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 5</summary>
+    </key>
+    <key name="shortcut-6" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 6</summary>
+    </key>
+    <key name="shortcut-7" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 7</summary>
+    </key>
+    <key name="shortcut-8" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 8</summary>
+    </key>
+    <key name="shortcut-9" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 9</summary>
+    </key>
+    <key name="shortcut-10" type="s">
+      <default>''</default>
+      <summary>Shortcut for position 10</summary>
     </key>
 
   </schema>

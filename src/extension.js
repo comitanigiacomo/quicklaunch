@@ -1,8 +1,10 @@
 import GObject from 'gi://GObject';
+import Gtk from 'gi://Gtk?version=4.0';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
+import Meta from 'gi://Meta';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -154,15 +156,13 @@ class AppPinner extends PanelMenu.Button {
             item.connect('activate', () => {
                 this._pinApp(app);
     
-            // 1. Resetta la ricerca PRIMA di lanciare l'app
-            this._searchInput.set_text('');
-            this._updateSearch();
-            
-            // 2. Chiudi il menu dopo aver aggiornato l'UI
-            this.menu.close();
-            
-            // 3. Lancia l'applicazione
-            app.launch();
+                // 1. Resetta la ricerca PRIMA di lanciare l'app
+                this._searchInput.set_text('');
+                this._updateSearch();
+                
+                // 2. Chiudi il menu dopo aver aggiornato l'UI
+                this.menu.close();
+                
             });
             
             this._resultsSection.box.add_child(item);
@@ -179,8 +179,9 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _sanitizeAppId(appId) {
-        return appId.replace('.desktop', '');
-    }
+    return appId.replace(/\.desktop$/, '')
+               .replace(/^application:\/+/g, ''); // Gestisce qualsiasi numero di slash dopo "application:"
+}
 
     _matchQuery(query, appName) {
         const keywords = appName.split(/[\s-]/);
@@ -199,6 +200,56 @@ class AppPinner extends PanelMenu.Button {
         return false;
     }
 
+    _launchApp(appId) {
+        console.log(`[DEBUG] _launchApp chiamato per ${appId}`);
+        
+        try {
+            const appSystem = Shell.AppSystem.get_default();
+            let app = appSystem.lookup_app(`${appId}.desktop`) || appSystem.lookup_app(appId);
+            
+            console.log(`[DEBUG] Risultato lookup_app:`, app?.get_id());
+    
+            if (!app) {
+                console.log(`[DEBUG] Tentativo fallito, prova con DesktopAppInfo...`);
+                const desktopApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+                console.log(`[DEBUG] Risultato DesktopAppInfo:`, desktopApp?.get_id());
+                
+                if (desktopApp) {
+                    console.log(`[DEBUG] Trovato DesktopAppInfo, comando: ${desktopApp.get_commandline()}`);
+                    if (this._settings.get_boolean('launch-animation')) {
+                        console.log(`[DEBUG] Utilizzo spawnCommandLine con animazione`);
+                        Util.spawnCommandLine(desktopApp.get_commandline());
+                    } else {
+                        console.log(`[DEBUG] Lancio diretto senza animazione`);
+                        desktopApp.launch([], null);
+                    }
+                    return;
+                }
+                console.error(`[ERROR] Applicazione ${appId} non trovata in nessun formato`);
+                return;
+            }
+    
+            console.log(`[DEBUG] Applicazione trovata nel sistema, nome: ${app.get_name()}`);
+            
+            if (this._settings.get_boolean('launch-animation')) {
+                console.log(`[DEBUG] Attivazione con animazione`);
+                app.activate();
+            } else {
+                console.log(`[DEBUG] Lancio senza animazione`);
+                const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+                if (gioApp) {
+                    console.log(`[DEBUG] Comando: ${gioApp.get_commandline()}`);
+                    Util.spawnCommandLine(gioApp.get_commandline());
+                } else {
+                    console.log(`[DEBUG] Fallback a app.launch(0)`);
+                    app.launch(0);
+                }
+            }
+        } catch(e) {
+            console.error(`[ERROR] Eccezione durante il lancio:`, e.message);
+        }
+    }
+
     _sortApps(a, b, query) {
         const aName = a.get_name().toLowerCase();
         const bName = b.get_name().toLowerCase();
@@ -215,6 +266,8 @@ class AppPinner extends PanelMenu.Button {
 
     _refreshUI() {
         if (this._destroyed) return;
+
+        console.log('[DEBUG] RefreshUI called'); // Aggiungi questo
         
         // Calcola la larghezza massima
         const schema = this._settings.settings_schema;
@@ -237,7 +290,11 @@ class AppPinner extends PanelMenu.Button {
 
         // Aggiorna icone pinnate
         this._pinnedIconsBox.destroy_all_children();
-        pinnedApps.forEach(appId => this._addPinnedIcon(appId));
+        console.log('[DEBUG] Pinned apps from settings:', pinnedApps); // Aggiungi questo
+        pinnedApps.forEach(appId => {
+            console.log('[DEBUG] Adding icon for:', appId); // Aggiungi questo
+            this._addPinnedIcon(appId);
+        });
 
         // Aggiorna sezione menu
         this._pinnedSection.box.destroy_all_children();
@@ -245,7 +302,11 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _addPinnedIcon(appId) {
-        const app = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+
+        console.log('[DEBUG] Trying to create icon for:', appId); // Aggiungi questo
+        const app = Gio.DesktopAppInfo.new(appId + '.desktop') || 
+                Gio.DesktopAppInfo.new(appId);
+    
         if (!app) {
             console.error(`Applicazione non trovata: ${appId}`);
             return;
@@ -449,6 +510,8 @@ class AppPinner extends PanelMenu.Button {
         });
     }
 
+    
+
     _addMenuPinnedItem(appId) {
         const app = Gio.DesktopAppInfo.new(`${appId}.desktop`);
         if (!app) {
@@ -484,7 +547,7 @@ class AppPinner extends PanelMenu.Button {
         });
 
         item.connect('activate', () => {
-            Util.spawn(app.get_commandline().split(' '));
+            this._launchApp(appId);
             this.menu.close();
         });
 
@@ -495,13 +558,24 @@ class AppPinner extends PanelMenu.Button {
     _pinApp(app) {
         const rawAppId = app.get_id();
         const appId = this._sanitizeAppId(rawAppId);
+        const maxApps = this._settings.get_int('max-apps');
+        
+        console.log(`[DEBUG] Max apps setting: ${maxApps}`); // Aggiungi questo
+        
         const current = this._settings.get_strv('pinned-apps');
         
-        if (current.length < this._settings.get_int('max-apps') && 
-           !current.includes(appId)) {
+        if (current.length >= maxApps) {
+            console.error('[ERROR] Impossibile pinnare - Limite massimo raggiunto');
+            return;
+        }
+        
+        if (!current.includes(appId)) {
             const updated = [...current, appId];
             this._settings.set_strv('pinned-apps', updated);
-            this._refreshUI(); // Forza aggiornamento immediato
+            console.log('[SUCCESS] App pinnata correttamente');
+            this._refreshUI();
+        } else {
+            console.log('[DEBUG] App già presente');
         }
     }
 
@@ -535,7 +609,24 @@ function arraysEqual(a, b) {
 }
 
 export default class AppPinnerExtension extends Extension {
+
+    _dbusImpl = null;
+
     enable() {
+
+        // Registra l'interfaccia DBus
+        const dbusInterface = `
+            <node>
+                <interface name="org.gnome.Shell.Extensions.AppPinner">
+                    <method name="LaunchPosition">
+                        <arg type="u" name="position" direction="in"/>
+                    </method>
+                </interface>
+            </node>`;
+        
+        this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(dbusInterface, this);
+        this._dbusImpl.export(Gio.DBus.session, '/org/gnome/Shell/Extensions/AppPinner');
+
         this._settings = this.getSettings();
         
         // Verifica valori iniziali
@@ -545,8 +636,143 @@ export default class AppPinnerExtension extends Extension {
             'changed::position-in-panel',
             () => this._safeRecreateIndicator()
         );
+
+        this._keybindings = [];
+        for (let i = 1; i <= 10; i++) {
+            this._addKeybinding(i);
+        }
+
+        this._shortcutHandler = this._settings.connect('changed', () => {
+            // Ricarica tutte le scorciatoie
+            this._keybindings.forEach(k => Main.wm.removeKeybinding(k));
+            this._keybindings = [];
+            
+            for (let i = 1; i <= 10; i++) {
+                const shortcut = this._settings.get_string(`shortcut-${i}`);
+                if (shortcut) {
+                    this._addKeybinding(i);
+                } else {
+                    this._removeKeybinding(i); // Aggiungi questa linea
+                }
+            }
+        });
+
+        for (let i = 1; i <= 10; i++) {
+            const shortcut = this._settings.get_string(`shortcut-${i}`);
+            if (shortcut && !this._validateAccelerator(shortcut)) {
+                console.warn(`Scorciatoia ${i} non valida: ${shortcut}`);
+                this._settings.set_string(`shortcut-${i}`, '');
+            }
+        }
         
         this._safeRecreateIndicator();
+    }
+
+    _addKeybinding(position) {
+        const key = `shortcut-${position}`;
+        const shortcut = this._settings.get_string(key);
+        
+        if (!shortcut) return;
+
+        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
+        
+        const customSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
+            path: customPath
+        });
+
+        customSettings.set_string('name', `App Pinner Position ${position}`);
+        customSettings.set_string('command', `dbus-send --session --type=method_call --dest=org.gnome.Shell /org/gnome/Shell/Extensions/AppPinner org.gnome.Shell.Extensions.AppPinner.LaunchPosition uint32:${position}`);
+        customSettings.set_string('binding', shortcut);
+
+        const mediaKeysSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
+        });
+        
+        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
+        if (!currentPaths.includes(customPath)) {
+            mediaKeysSettings.set_strv('custom-keybindings', [...currentPaths, customPath]);
+        }
+    }
+
+    _removeKeybinding(position) {
+        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
+        
+        // Rimuovi le impostazioni della scorciatoia
+        const customSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
+            path: customPath
+        });
+        customSettings.reset('name');
+        customSettings.reset('command');
+        customSettings.reset('binding');
+    
+        // Rimuovi il percorso dalla lista globale
+        const mediaKeysSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
+        });
+        
+        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
+        const newPaths = currentPaths.filter(p => p !== customPath);
+        mediaKeysSettings.set_strv('custom-keybindings', newPaths);
+    }
+
+    LaunchPosition(position) {
+        this._launchAppByPosition(position);
+    }
+
+    _launchAppByPosition(position) {
+
+        
+        console.log(`[KEYBINDING] Shortcut ${position} premuta!`); // <-- Nuovo log
+    
+        console.log(`[DEBUG] Ricevuta richiesta lancio posizione ${position}`);
+        const apps = this._settings.get_strv('pinned-apps');
+        console.log(`[DEBUG] App pinnate attuali:`, apps);
+        console.log(`[DEBUG] Indicator stato: ${this._indicator ? "OK" : "UNDEFINED"}`);
+        
+        if (apps.length === 0) {
+            console.error('[ERROR] Nessuna applicazione pinnata');
+            return;
+        }
+    
+        const index = position - 1;
+        console.log(`[DEBUG] Indice calcolato: ${index} (lunghezza array: ${apps.length})`);
+    
+        if (index < 0 || index >= apps.length) {
+            console.error(`[ERROR] Indice non valido: ${index} (max: ${apps.length - 1})`);
+            return;
+        }
+    
+        const appId = apps[index];
+        console.log(`[DEBUG] Tentativo lancio app ID: ${appId}`);
+        console.log(`[DEBUG] AppId in posizione ${position}: ${appId} (Tipo: ${typeof appId})`);
+
+    
+        if (!this._indicator) {
+            console.error('[ERROR] Indicator non inizializzato');
+            return;
+        }
+    
+        // Verifica multipla esistenza app
+        const appSys = Shell.AppSystem.get_default();
+        let app = appSys.lookup_app(`${appId}.desktop`) || appSys.lookup_app(appId);
+        
+        if (!app) {
+            console.log(`[DEBUG] App non trovata in AppSystem, prova con DesktopAppInfo...`);
+            const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
+            
+            if (!gioApp) {
+                console.error(`[ERROR] App ${appId} non trovata in nessun formato`);
+                return;
+            }
+            console.log(`[DEBUG] Trovato DesktopAppInfo:`, gioApp.get_id(), 'Comando:', gioApp.get_commandline());
+        } else {
+            console.log(`[DEBUG] Trovato in AppSystem:`, app.get_name(), 'ID:', app.get_id());
+        }
+    
+        console.log(`[SUCCESS] Chiamata a _launchApp per ${appId}`);
+        this._indicator._launchApp(appId);
     }
 
     _validateSettings() {
@@ -554,6 +780,15 @@ export default class AppPinnerExtension extends Extension {
         const currentPos = this._settings.get_string('position-in-panel');
         if (!['left', 'right'].includes(currentPos)) {
             this._settings.set_string('position-in-panel', 'right');
+        }
+    }
+
+    _validateAccelerator(accelerator) {
+        try {
+            const [success, keyval] = Gtk.accelerator_parse(accelerator);
+            return success && keyval !== 0;
+        } catch (e) {
+            return false;
         }
     }
 
@@ -626,10 +861,22 @@ export default class AppPinnerExtension extends Extension {
     }
 
     disable() {
+
+        // Rimuovi tutte le scorciatoie
+        for (let i = 1; i <= 10; i++) {
+            this._removeKeybinding(i); // Usa il nuovo metodo
+        }
+        
+        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
+        const newPaths = currentPaths.filter(p => !p.includes('app-pinner-'));
+        mediaKeysSettings.set_strv('custom-keybindings', newPaths);
         if (this._positionHandler) {
             this._settings.disconnect(this._positionHandler);
             this._positionHandler = null;
         }
+
+        this._keybindings.forEach(key => Main.wm.removeKeybinding(key));
+        this._keybindings = [];
         
         if (this._indicator) {
             // Rimuovi esplicitamente dal contenitore
@@ -640,7 +887,7 @@ export default class AppPinnerExtension extends Extension {
             this._indicator.destroy();
             this._indicator = null;
         }
-        
-        Util.garbageCollect();
+
+        this._settings.disconnect(this._shortcutHandler);
     }
 }

@@ -201,26 +201,19 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _launchApp(appId) {
-        console.log(`[DEBUG] _launchApp chiamato per ${appId}`);
         
         try {
             const appSystem = Shell.AppSystem.get_default();
             let app = appSystem.lookup_app(`${appId}.desktop`) || appSystem.lookup_app(appId);
             
-            console.log(`[DEBUG] Risultato lookup_app:`, app?.get_id());
     
             if (!app) {
-                console.log(`[DEBUG] Tentativo fallito, prova con DesktopAppInfo...`);
                 const desktopApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
-                console.log(`[DEBUG] Risultato DesktopAppInfo:`, desktopApp?.get_id());
                 
                 if (desktopApp) {
-                    console.log(`[DEBUG] Trovato DesktopAppInfo, comando: ${desktopApp.get_commandline()}`);
                     if (this._settings.get_boolean('launch-animation')) {
-                        console.log(`[DEBUG] Utilizzo spawnCommandLine con animazione`);
                         Util.spawnCommandLine(desktopApp.get_commandline());
                     } else {
-                        console.log(`[DEBUG] Lancio diretto senza animazione`);
                         desktopApp.launch([], null);
                     }
                     return;
@@ -229,19 +222,14 @@ class AppPinner extends PanelMenu.Button {
                 return;
             }
     
-            console.log(`[DEBUG] Applicazione trovata nel sistema, nome: ${app.get_name()}`);
             
             if (this._settings.get_boolean('launch-animation')) {
-                console.log(`[DEBUG] Attivazione con animazione`);
                 app.activate();
             } else {
-                console.log(`[DEBUG] Lancio senza animazione`);
                 const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
                 if (gioApp) {
-                    console.log(`[DEBUG] Comando: ${gioApp.get_commandline()}`);
                     Util.spawnCommandLine(gioApp.get_commandline());
                 } else {
-                    console.log(`[DEBUG] Fallback a app.launch(0)`);
                     app.launch(0);
                 }
             }
@@ -486,7 +474,30 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _animateAndMoveToEnd(appId, iconBox) {
-        // Animazione di "sollevamento" e dissolvenza
+        const currentApps = this._settings.get_strv('pinned-apps');
+        const currentIndex = currentApps.indexOf(appId);
+    
+        // Se l'icona è già in ultima posizione, anima il rimbalzo
+        if (currentIndex === currentApps.length - 1) {
+            // Animazione di rimbalzo
+            iconBox.ease({
+                scale_x: 1.2,
+                scale_y: 1.2,
+                duration: 200,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    iconBox.ease({
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        duration: 300,
+                        mode: Clutter.AnimationMode.EASE_OUT_BOUNCE
+                    });
+                }
+            });
+            return;
+        }
+    
+        // Animazione standard per spostamento
         iconBox.ease({
             scale_x: 1.2,
             scale_y: 1.2,
@@ -494,15 +505,16 @@ class AppPinner extends PanelMenu.Button {
             duration: 300,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onComplete: () => {
-                // Sposta l'app in ultima posizione
-                const current = this._settings.get_strv('pinned-apps');
-                const index = current.indexOf(appId);
-                if (index === -1) return;
+                const updatedApps = this._settings.get_strv('pinned-apps');
+                const newIndex = updatedApps.indexOf(appId);
                 
+                // Verifica nuovamente se non è diventata l'ultima nel frattempo
+                if (newIndex === updatedApps.length - 1) return;
+    
                 const newOrder = [
-                    ...current.slice(0, index),
-                    ...current.slice(index + 1),
-                    current[index]
+                    ...updatedApps.slice(0, newIndex),
+                    ...updatedApps.slice(newIndex + 1),
+                    updatedApps[newIndex]
                 ];
                 
                 this._settings.set_strv('pinned-apps', newOrder);

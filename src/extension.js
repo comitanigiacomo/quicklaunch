@@ -10,13 +10,16 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-
 const AppPinner = GObject.registerClass(
 class AppPinner extends PanelMenu.Button {
     _init(settings) {
         super._init(0.0, _('App Pinner'));
         this._settings = settings;
         this._destroyed = false;
+        this._pendingApps = new Set();
+
+        this._windowTracker = Shell.WindowTracker.get_default();
+        this._windowTracker.connect('notify::window-app', this._updateRunningIndicators.bind(this));
 
         this._appSystem = Shell.AppSystem.get_default();
         this._runningTracker = new Set();
@@ -93,6 +96,13 @@ class AppPinner extends PanelMenu.Button {
                 console.error('Errore inizializzazione proxy login1:', e.message);
             }
         });
+
+        this._appStateChangedId = this._appSystem.connect('app-state-changed', () => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._updateRunningIndicators();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
     }
 
     _handleWakeupEvent() {
@@ -107,7 +117,7 @@ class AppPinner extends PanelMenu.Button {
         const [isSleeping] = params.deepUnpack();
         if (!isSleeping) {
             // Double-check dopo 8 secondi
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 8000, () => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
                 this._forceFullRefresh();
                 return GLib.SOURCE_REMOVE;
             });
@@ -257,11 +267,50 @@ class AppPinner extends PanelMenu.Button {
                 }
             }
             
-            app.activate(); // Always use activate to ensure tracking
+            // Aggiungi l'app alla lista di quelle in avvio
+            this._pendingApps.add(appId);
+            
+            app.activate();
+    
+            // Aggiornamento immediato
+            this._forceImmediateUpdate(appId);
+            
+            // Verifica rinforzata dopo 1.5s con rimozione dallo stato pending
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+                this._pendingApps.delete(appId);
+                this._updateRunningIndicator(appId, this._getIndicatorForApp(appId));
+                return GLib.SOURCE_REMOVE;
+            });
+    
         } catch(e) {
             console.error(`[ERROR] Exception while launching:`, e.message);
+            this._pendingApps.delete(appId);
         }
     }
+
+    _getIndicatorForApp(appId) {
+        const iconBox = this._pinnedIconsBox.get_children().find(b => b.appId === appId);
+        return iconBox ? iconBox.runningIndicator : null;
+    }
+
+    _forceImmediateUpdate(appId) {
+        const indicator = this._getIndicatorForApp(appId);
+        if (indicator) {
+            // Ottimizzazione UI: Mostra subito l'indicatore con animazione
+            indicator.visible = true;
+            indicator.opacity = 0;
+            indicator.set_scale(0.5, 0.5);
+            indicator.ease({
+                opacity: 255,
+                scale_x: 1,
+                scale_y: 1,
+                duration: 300,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD
+            });
+        }
+        this._updateRunningIndicators();
+    }
+    
 
     _sortApps(a, b, query) {
         const aName = a.get_name().toLowerCase();
@@ -439,40 +488,19 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _forceFullRefresh() {
-        // Forza un refresh completo del sistema applicazioni
-        this._appSystem = Shell.AppSystem.get_default();
+        this._runningTracker = new Set(
+            this._appSystem.get_running().map(app => this._sanitizeAppId(app.get_id()))
+        );
         
-        // Aggiorna gli indicatori con un ritardo progressivo
-        let retryCount = 0;
-        const maxRetries = 5;
-        
-        const refresh = () => {
-            this._runningTracker = new Set(
-                this._appSystem.get_running()
-                    .map(app => this._sanitizeAppId(app.get_id()))
-            );
+        // Aggiornamento visivo immediato
+        this._pinnedIconsBox.get_children().forEach(iconBox => {
+            this._updateRunningIndicator(iconBox.appId, iconBox.runningIndicator);
+        });
     
-            this._updateRunningIndicators();
-            this._refreshUI();
-            
-            // Verifica se gli indicatori sono aggiornati
-            const children = this._pinnedIconsBox.get_children();
-            const hasVisibleIndicators = children.some(iconBox => 
-                iconBox.runningIndicator?.visible
-            );
-            
-            if (!hasVisibleIndicators && retryCount < maxRetries) {
-                retryCount++;
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000 * retryCount, () => {
-                    refresh();
-                    return GLib.SOURCE_REMOVE;
-                });
-            }
-        };
-        
-        // Primo tentativo dopo 1 secondo
+        // Verifica persistente per app complesse
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
-            refresh();
+            this._appSystem = Shell.AppSystem.get_default();
+            this._updateRunningIndicators();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -490,8 +518,26 @@ class AppPinner extends PanelMenu.Button {
     }
 
     _updateRunningIndicator(appId, indicator) {
-        const app = this._findAppById(appId);
-        const isRunning = app ? app.get_state() === Shell.AppState.RUNNING : false;
+        let isRunning = false;
+        
+        // Se l'app è in stato pending, forza la visualizzazione
+        if (this._pendingApps.has(appId)) {
+            isRunning = true;
+        } else {
+            const app = this._findAppById(appId);
+            isRunning = app ? app.get_state() === Shell.AppState.RUNNING : false;
+            
+            // Controllo aggiuntivo finestre
+            if (!isRunning && app) {
+                try {
+                    const windows = app.get_windows();
+                    isRunning = windows.length > 0;
+                } catch(e) {
+                    console.error('Errore controllo finestre:', e);
+                }
+            }
+        }
+    
         console.log(`[DEBUG] Stato app ${appId}: ${isRunning ? "Running" : "Non running"}`);
         
         indicator.visible = isRunning;

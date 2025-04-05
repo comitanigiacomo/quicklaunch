@@ -101,6 +101,11 @@
       <default>''</default>
       <summary>Shortcut for position 10</summary>
     </key>
+    <key type="as" name="startup-apps">
+      <default>[]</default>
+      <summary>Startup Applications</summary>
+      <description>List of application IDs to launch at system startup.</description>
+    </key>
 
   </schema>
 </schemalist>

@@ -230,11 +230,11 @@ const AppPinner = GObject.registerClass(
         }
 
         _sanitizeAppId(appId) {
-            return appId
-                .replace(/\.desktop$/i, '')
-                .replace(/^application:\/\//, '')
-                .replace(/\s+/g, '-')
-                .toLowerCase();
+            const sanitized = appId
+                .replace(/\.desktop$/i, '') // Rimuovi solo .desktop finale
+                .replace(/^application:\/\//i, ''); // Mantieni il case originale
+            console.log(`[DEBUG] Sanitized app ID: ${appId} => ${sanitized}`);
+            return sanitized;
         }
 
         _matchQuery(query, appName) {
@@ -345,7 +345,9 @@ const AppPinner = GObject.registerClass(
             const range = key.get_range();
             const [minSize, maxIconSize] = range.deep_unpack();
 
+            console.log('[DEBUG] RefreshUI called');
             const pinnedApps = this._settings.get_strv('pinned-apps');
+            console.log('[DEBUG] Pinned apps from settings:', pinnedApps);
             const spacing = this._settings.get_int('spacing');
             const numApps = pinnedApps.length;
 
@@ -356,13 +358,19 @@ const AppPinner = GObject.registerClass(
             this._mainContainer.set_style(`
             min-width: ${containerWidth}px;
             padding: 0 ${spacing}px;
-        `);
+            `);
 
             // Aggiorna icone pinnate
             this._pinnedIconsBox.destroy_all_children();
             console.log('[DEBUG] Pinned apps from settings:', pinnedApps); // Aggiungi questo
             pinnedApps.forEach(appId => {
-                console.log('[DEBUG] Adding icon for:', appId); // Aggiungi questo
+                console.log('[DEBUG] Processing app ID:', appId);
+                const app = Gio.DesktopAppInfo.new(appId + '.desktop') || Gio.DesktopAppInfo.new(appId);
+                if (!app) {
+                    console.error(`[ERROR] App not found for ID: ${appId}`);
+                    return;
+                }
+                console.log(`[DEBUG] Found app: ${app.get_name()} (${app.get_id()})`);
                 this._addPinnedIcon(appId);
             });
 
@@ -373,12 +381,36 @@ const AppPinner = GObject.registerClass(
 
         _addPinnedIcon(appId) {
 
+            console.log(`[DEBUG] Adding pinned icon for: ${appId}`);
+
             const app = Gio.DesktopAppInfo.new(appId + '.desktop') ||
                 Gio.DesktopAppInfo.new(appId);
 
             if (!app) {
-                console.error(`Applicazione non trovata: ${appId}`);
-                return;
+                console.error(`[ERROR] Application not found: ${appId}`);
+                // Prova a cercare in altre posizioni
+                const altPaths = [
+                    GLib.build_filenamev([GLib.get_home_dir(), '.local', 'share', 'applications', `${appId}.desktop`]),
+                    `/var/lib/flatpak/exports/share/applications/${appId}.desktop`,
+                    `${GLib.get_home_dir()}/.local/share/flatpak/exports/share/applications/${appId}.desktop`
+                ];
+
+                for (const path of altPaths) {
+                    console.log(`[DEBUG] Checking alternative path: ${path}`);
+                    if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+                        const altApp = Gio.DesktopAppInfo.new_from_filename(path);
+                        if (altApp) {
+                            app = altApp;
+                            console.log(`[DEBUG] Found alternative app at: ${path}`);
+                            break;
+                        }
+                    }
+                }
+
+                if (!app) {
+                    console.error(`[CRITICAL] App not found in any location: ${appId}`);
+                    return;
+                }
             }
 
             const iconSize = this._settings.get_int('icon-size');
@@ -573,17 +605,27 @@ const AppPinner = GObject.registerClass(
         }
 
         _findAppById(appId) {
-            // Cerca in tutti i formati possibili
-            const app = this._appSystem.lookup_app(appId) ||
+            console.log(`[DEBUG] Looking up app: ${appId}`);
+            let app = this._appSystem.lookup_app(appId) ||
                 this._appSystem.lookup_app(`${appId}.desktop`);
 
             if (!app) {
-                // Prova con Gio.DesktopAppInfo per applicazioni non registrate
-                const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+                console.log(`[DEBUG] App not found in AppSystem, trying DesktopAppInfo...`);
+                const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) ||
+                    Gio.DesktopAppInfo.new(appId);
+
                 if (gioApp) {
-                    return this._appSystem.lookup_app(gioApp.get_id());
+                    console.log(`[DEBUG] Found via DesktopAppInfo: ${gioApp.get_id()}`);
+                    app = this._appSystem.lookup_app(gioApp.get_id());
                 }
             }
+
+            if (app) {
+                console.log(`[DEBUG] App found: ${app.get_id()} (${app.get_name()})`);
+            } else {
+                console.error(`[DEBUG] App not found in any system: ${appId}`);
+            }
+
             return app;
         }
 
@@ -764,25 +806,17 @@ const AppPinner = GObject.registerClass(
 
         _pinApp(app) {
             const rawAppId = app.get_id();
-            const appId = this._sanitizeAppId(rawAppId);
-            const maxApps = this._settings.get_int('max-apps');
+            console.log(`[DEBUG] Raw app ID: ${rawAppId}`);
 
-            console.log(`[DEBUG] Max apps setting: ${maxApps}`); // Aggiungi questo
+            // Usa l'ID originale invece di sanitizzarlo
+            const appId = rawAppId.replace(/\.desktop$/i, '');
+
+            console.log(`[DEBUG] Using app ID: ${appId}`);
 
             const current = this._settings.get_strv('pinned-apps');
-
-            if (current.length >= maxApps) {
-                console.error('[ERROR] Impossibile pinnare - Limite massimo raggiunto');
-                return;
-            }
-
             if (!current.includes(appId)) {
                 const updated = [...current, appId];
                 this._settings.set_strv('pinned-apps', updated);
-                console.log('[SUCCESS] App pinnata correttamente');
-                this._refreshUI();
-            } else {
-                console.log('[DEBUG] App già presente');
             }
         }
 
@@ -854,36 +888,44 @@ export default class AppPinnerExtension extends Extension {
     _dbusImpl = null;
 
     _getAppInfo(appId) {
-        // Cerca prima via AppSystem per ottenere l'ID corretto
-        const shellApp = Shell.AppSystem.get_default().lookup_app(appId);
-        if (shellApp) {
-            return Gio.DesktopAppInfo.new(shellApp.get_id());
+        console.log(`[DEBUG] Getting app info for: ${appId}`);
+
+        // Cerca prima via AppSystem con case-insensitive
+        const appSys = Shell.AppSystem.get_default();
+        const allApps = appSys.get_installed();
+        const foundApp = allApps.find(app =>
+            app.get_id().toLowerCase() === appId.toLowerCase()
+        );
+
+        if (foundApp) {
+            console.log(`[DEBUG] Found via AppSystem (case-insensitive): ${foundApp.get_id()}`);
+            return Gio.DesktopAppInfo.new(foundApp.get_id());
         }
-    
-        // Fallback a DesktopAppInfo con varianti
-        const variants = [
-            appId,
-            `${appId}.desktop`,
-            appId.toLowerCase(),
-            `${appId.toLowerCase()}.desktop`,
-            appId.replace(/-/g, ''),
-            `${appId.replace(/-/g, '')}.desktop`
+
+        // Cerca nei percorsi Flatpak
+        const flatpakPaths = [
+            '/var/lib/flatpak/exports/share/applications/',
+            `${GLib.get_home_dir()}/.local/share/flatpak/exports/share/applications/`
         ];
-    
-        for (const variant of variants) {
-            const appInfo = Gio.DesktopAppInfo.new(variant);
-            if (appInfo) return appInfo;
+
+        for (const path of flatpakPaths) {
+            const fullPath = `${path}${appId}.desktop`;
+            if (GLib.file_test(fullPath, GLib.FileTest.EXISTS)) {
+                console.log(`[DEBUG] Found Flatpak app at: ${fullPath}`);
+                return Gio.DesktopAppInfo.new_from_filename(fullPath);
+            }
         }
-    
-        // Ultimo tentativo: cerca in tutte le directory delle applicazioni
+
+        // Cerca in tutte le directory delle applicazioni
         const dataDirs = GLib.get_system_data_dirs();
         for (const dataDir of dataDirs) {
             const appPath = `${dataDir}/applications/${appId}.desktop`;
             if (GLib.file_test(appPath, GLib.FileTest.EXISTS)) {
+                console.log(`[DEBUG] Found app in system dir: ${appPath}`);
                 return Gio.DesktopAppInfo.new_from_filename(appPath);
             }
         }
-    
+
         console.error(`[ERROR] App non trovata in nessun percorso: ${appId}`);
         return null;
     }
@@ -898,37 +940,37 @@ export default class AppPinnerExtension extends Extension {
 
     _syncAutostart() {
         const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
-        
+
         const startupApps = this._settings.get_strv('startup-apps');
-    
+
         if (!GLib.file_test(autostartDir, GLib.FileTest.IS_DIR)) {
             GLib.mkdir_with_parents(autostartDir, 0o755);
         }
-    
+
         const validFiles = new Map();
-    
+
         startupApps.forEach(appId => {
             const appInfo = this._getAppInfo(appId);
             if (!appInfo) {
                 console.error(`[ERROR] App non trovata: ${appId}`);
                 return;
             }
-    
+
             // Ottieni il vero ID .desktop
             const desktopId = appInfo.get_id() || `${appId}.desktop`;
             const sanitizedId = this._sanitizeForFilename(desktopId);
             const fileName = `app-pinner-${sanitizedId}.desktop`;
             validFiles.set(fileName, true);
-    
+
             const filePath = `${autostartDir}/${fileName}`;
-    
+
             // Usa il comando originale dal file .desktop
             const execCommand = appInfo.get_string('Exec');
             if (!execCommand) {
                 console.error(`[ERROR] Comando non trovato per ${appId}`);
                 return;
             }
-    
+
             const desktopContent = [
                 '[Desktop Entry]',
                 'Type=Application',
@@ -941,7 +983,7 @@ export default class AppPinnerExtension extends Extension {
                 'NoDisplay=false',
                 ''
             ].join('\n');
-    
+
             try {
                 GLib.file_set_contents(filePath, desktopContent);
                 GLib.chmod(filePath, 0o644);
@@ -949,7 +991,7 @@ export default class AppPinnerExtension extends Extension {
                 console.error(`Errore scrittura file ${filePath}:`, e.message);
             }
         });
-    
+
         // Pulizia file orfani
         const dir = Gio.File.new_for_path(autostartDir);
         try {
@@ -965,28 +1007,28 @@ export default class AppPinnerExtension extends Extension {
             console.error('Errore durante la pulizia dei file:', e.message);
         }
     }
-    
+
     // Aggiungere questo metodo helper
     _sanitizeForFilename(appId) {
         return appId.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_');
     }
-    
+
     // Modificare
     _cleanOrphanedStartupApps() {
         const pinnedApps = this._settings.get_strv('pinned-apps');
         const startupApps = this._settings.get_strv('startup-apps');
-        
+
         // Crea una mappa degli App ID validi
         const validApps = new Set(pinnedApps.map(appId => {
             const appInfo = this._getAppInfo(appId);
             return appInfo ? appInfo.get_id().replace('.desktop', '') : null;
         }));
-    
+
         const cleaned = startupApps.filter(appId => {
             const appInfo = this._getAppInfo(appId);
             return appInfo && validApps.has(appInfo.get_id().replace('.desktop', ''));
         });
-    
+
         if (!arraysEqual(cleaned, startupApps)) {
             console.log('[DEBUG] Pulizia app di avvio non valide:', startupApps.filter(a => !cleaned.includes(a)));
             this._settings.set_strv('startup-apps', cleaned);

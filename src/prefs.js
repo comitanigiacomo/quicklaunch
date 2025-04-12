@@ -392,6 +392,32 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         settings.bind('enable-labels', labelsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         group.add(labelsRow);
 
+        // Sostituisci Adw.ColorRow con Gtk.ColorButton
+        const colorRow = new Adw.ActionRow({
+            title: 'Indicator Color',
+            subtitle: 'Choose color for running apps indicator'
+        });
+
+        const colorButton = new Gtk.ColorButton({
+            valign: Gtk.Align.CENTER,
+            use_alpha: true
+        });
+
+        // Converti il valore stringa in Gdk.RGBA
+        const initialColor = new Gdk.RGBA();
+        initialColor.parse(settings.get_string('indicator-color'));
+        colorButton.set_rgba(initialColor);
+
+        // Aggiorna le impostazioni quando cambia il colore
+        colorButton.connect('color-set', (btn) => {
+            const color = btn.get_rgba().to_string();
+            settings.set_string('indicator-color', color);
+        });
+
+        colorRow.add_suffix(colorButton);
+        colorRow.set_activatable_widget(colorButton);
+        group.add(colorRow);
+
         page.add(group);
     }
 
@@ -436,81 +462,81 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
             title: 'Launch at Startup',
             description: 'Select applications to launch automatically when you log in'
         });
-    
+
         const listStore = new Gtk.StringList();
         const updateList = () => {
             const pinned = settings.get_strv('pinned-apps');
             listStore.splice(0, listStore.get_n_items(), pinned);
         };
-    
+
         updateList();
         settings.connect('changed::pinned-apps', updateList);
-    
+
         const factory = new Gtk.SignalListItemFactory();
         factory.connect('setup', (_, listItem) => {
             const row = new Adw.ActionRow();
             const icon = new Gtk.Image({ icon_size: Gtk.IconSize.LARGE, margin_end: 12 });
             row.add_prefix(icon);
-    
+
             const toggle = new Gtk.Switch({
                 valign: Gtk.Align.CENTER,
                 halign: Gtk.Align.END
             });
             row.add_suffix(toggle);
-    
+
             // Salva riferimenti per il binding
             row._icon = icon;
             row._toggle = toggle;
             listItem.set_child(row);
         });
-    
+
         factory.connect('bind', (_, listItem) => {
             const appId = listItem.get_item().string;
             const row = listItem.get_child();
             const toggle = row._toggle;
-    
+
             // Aggiorna lo stato dell'interruttore
             const startupApps = settings.get_strv('startup-apps');
             const isActive = startupApps.includes(appId);
             toggle.set_active(isActive);
-    
+
             // Connetti il segnale dopo aver impostato lo stato iniziale
             toggle.connect('notify::active', (sw) => {
                 const newActive = sw.active;
-                
+
                 const currentStartup = settings.get_strv('startup-apps');
-    
-                const newStartupApps = newActive 
+
+                const newStartupApps = newActive
                     ? [...currentStartup, appId]
                     : currentStartup.filter(id => id !== appId);
-    
+
                 settings.set_strv('startup-apps', newStartupApps);
-    
+
                 // Verifica immediata dello stato salvato
                 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
                     const verify = settings.get_strv('startup-apps');
                     return GLib.SOURCE_REMOVE;
                 });
             });
-    
+
             // Aggiorna icona e nome
             const appInfo = this._getAppInfo(appId);
             row.set_title(appInfo?.get_name() || appId);
             row._icon.set_from_gicon(appInfo?.get_icon());
         });
-    
+
         const listView = new Gtk.ListView({
             model: new Gtk.SingleSelection({ model: listStore }),
             factory: factory
         });
-    
+
         const scrolledWindow = new Gtk.ScrolledWindow({
             height_request: 300,
             child: listView
         });
         group.add(scrolledWindow);
         page.add(group);
-    
+
         // Aggiungi listener per cambiamenti nelle impostazioni
         settings.connect('changed::startup-apps', () => {
             console.log('[STARTUP] Impostazioni startup-apps cambiate:', settings.get_strv('startup-apps'));
@@ -520,13 +546,13 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
     _getAppDisplayInfo(appId) {
         // Tentativo 1: Cerca direttamente
         let appInfo = Gio.DesktopAppInfo.new(`${appId}.desktop`);
-        
+
         // Tentativo 2: Rimuovi eventuali URL schemes
         if (!appInfo) {
             const cleanId = appId.replace(/^application:\/\//, '');
             appInfo = Gio.DesktopAppInfo.new(`${cleanId}.desktop`);
         }
-        
+
         // Tentativo 3: Cerca tramite AppSystem
         if (!appInfo) {
             const shellApp = Shell.AppSystem.get_default().lookup_app(appId);
@@ -537,7 +563,7 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
                 };
             }
         }
-        
+
         // Tentativo 4: Cerca in altri formati
         if (!appInfo) {
             const variations = [
@@ -546,13 +572,13 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
                 `${appId}.desktop`,
                 `${appId.toLowerCase()}.desktop`
             ];
-            
+
             for (const variant of variations) {
                 appInfo = Gio.DesktopAppInfo.new(variant);
                 if (appInfo) break;
             }
         }
-    
+
         return {
             name: appInfo ? appInfo.get_name() : appId,
             icon: appInfo ? appInfo.get_icon() : null

@@ -1,5 +1,6 @@
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
+import Gdk from 'gi://Gdk?version=4.0';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
@@ -66,7 +67,12 @@ const AppPinner = GObject.registerClass(
                     this._pinnedIconsBox.queue_relayout();
                 }),
                 this._settings.connect('changed::enable-labels', () => this._refreshUI()),
-                this._settings.connect('changed::pinned-apps', () => this._refreshUI())
+                this._settings.connect('changed::pinned-apps', () => this._refreshUI()),
+                // Aggiungi questa nuova connessione
+                this._settings.connect('changed::indicator-color', () => {
+                    this._updateIndicatorColor();
+                    this._updateRunningIndicators();
+                })
             ];
 
             this.menu.actor.connect('button-press-event', (actor, event) => {
@@ -452,6 +458,12 @@ const AppPinner = GObject.registerClass(
                 translation_y: -9
             });
 
+            this._updateIndicatorColor(runningIndicator);
+
+            this._settings.connect('changed::indicator-color', 
+                () => this._updateIndicatorColor(runningIndicator));
+        
+
             iconContainer.add_child(iconButton);
             iconContainer.add_child(runningIndicator);
 
@@ -759,6 +771,10 @@ const AppPinner = GObject.registerClass(
             });
         }
 
+        _updateIndicatorColor(indicator) {
+            const color = this._settings.get_string('indicator-color');
+            indicator.set_style(`background-color: ${color};`);
+        }
 
 
         _addMenuPinnedItem(appId) {

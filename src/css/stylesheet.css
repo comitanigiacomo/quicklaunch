@@ -52,4 +52,22 @@
     position: relative; /* Necessario per il posizionamento assoluto dell'indicatore */
 }
 
+.app-pinner-add-link-btn {
+    padding: 6px;
+    margin-left: 6px;
+}
 
+.app-pinner-add-link-btn:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.app-pinner-label {
+    max-width: 100px;
+    text-overflow: ellipsis;
+}
+
+
+.app-pinner-remove-btn {
+    margin-left: 15px;
+    padding: 6px;
+}

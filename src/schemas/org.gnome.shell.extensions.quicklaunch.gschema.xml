@@ -111,6 +111,10 @@
       <summary>Indicator color</summary>
       <description>Color for running application indicator</description>
     </key>
+    <key name="custom-links" type="as">
+      <default>[]</default>
+      <summary>Custom pinned links</summary>
+    </key>
 
   </schema>
 </schemalist>

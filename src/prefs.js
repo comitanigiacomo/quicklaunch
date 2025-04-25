@@ -35,8 +35,6 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
             title: 'Advanced',
             icon_name: 'dialog-password-symbolic'
         });
-        this._buildAdvancedPage(advancedPage, settings);
-        window.add(advancedPage);
 
 
         // Pagina Avvio Automatico
@@ -385,13 +383,6 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         settings.bind('spacing', spacingRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         group.add(spacingRow);
 
-        // Etichette
-        const labelsRow = new Adw.SwitchRow({
-            title: 'Show Application Labels'
-        });
-        settings.bind('enable-labels', labelsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        group.add(labelsRow);
-
         // Sostituisci Adw.ColorRow con Gtk.ColorButton
         const colorRow = new Adw.ActionRow({
             title: 'Indicator Color',
@@ -417,42 +408,6 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         colorRow.add_suffix(colorButton);
         colorRow.set_activatable_widget(colorButton);
         group.add(colorRow);
-
-        page.add(group);
-    }
-
-    _buildAdvancedPage(page, settings) {
-        const group = new Adw.PreferencesGroup();
-
-        // Numero massimo app
-        const maxAppsRow = new Adw.SpinRow({
-            title: 'Maximum Applications',
-            adjustment: new Gtk.Adjustment({
-                value: settings.get_int('max-apps'),
-                lower: 1,
-                upper: 20,
-                step_increment: 1
-            })
-        });
-        settings.bind('max-apps', maxAppsRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-        group.add(maxAppsRow);
-
-        // App predefinite
-        const defaultAppsRow = new Adw.EntryRow({
-            title: 'Default Apps',
-            text: settings.get_strv('default-apps').join(', ')
-        });
-        settings.bind('default-apps', defaultAppsRow, 'text',
-            Gio.SettingsBindFlags.DEFAULT);
-        group.add(defaultAppsRow);
-
-        // Animazioni
-        const animationRow = new Adw.SwitchRow({
-            title: 'Enable Launch Animation'
-        });
-        settings.bind('launch-animation', animationRow, 'active',
-            Gio.SettingsBindFlags.DEFAULT);
-        group.add(animationRow);
 
         page.add(group);
     }

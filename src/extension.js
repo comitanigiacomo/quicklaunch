@@ -49,11 +49,11 @@ const AppPinner = GObject.registerClass(
             // Contenitore icone pinnate
             this._pinnedIconsBox = new St.BoxLayout({
                 style_class: 'app-pinner-icons',
-                vertical: false, // Layout orizzontale
-                x_align: Clutter.ActorAlign.CENTER, // Centra ORIZZONTALMENTE
+                vertical: false,
+                x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
-                x_expand: true,   // Occupa tutta la larghezza
-                y_expand: true    // Occupa tutta l'altezza
+                x_expand: true,
+                y_expand: true
             });
             this._mainContainer.add_child(this._pinnedIconsBox);
 
@@ -76,7 +76,7 @@ const AppPinner = GObject.registerClass(
 
             this.menu.actor.connect('button-press-event', (actor, event) => {
                 const target = event.get_source();
-                // Chiudi solo se il click è FUORI dal menu
+                
                 if (!this.menu.actor.contains(target)) {
                     this.menu.close();
                 }
@@ -124,7 +124,7 @@ const AppPinner = GObject.registerClass(
         _handleSleepSignal(sender, signalName, params) {
             const [isSleeping] = params.deepUnpack();
             if (!isSleeping) {
-                // Double-check dopo 8 secondi
+                
                 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
                     this._forceFullRefresh();
                     return GLib.SOURCE_REMOVE;
@@ -302,7 +302,6 @@ const AppPinner = GObject.registerClass(
             const sanitized = appId
                 .replace(/\.desktop$/i, '')
                 .replace(/^application:\/\//i, '');
-            console.log(`[DEBUG] Sanitized app ID: ${appId} => ${sanitized}`);
             return sanitized;
         }
 
@@ -356,7 +355,6 @@ const AppPinner = GObject.registerClass(
                 });
 
             } catch (e) {
-                console.error(`[ERROR] Exception while launching:`, e.message);
                 this._pendingApps.delete(appId);
             }
 
@@ -443,13 +441,11 @@ const AppPinner = GObject.registerClass(
                 return this._addLinkIcon(url);
             }
 
-            console.log(`[DEBUG] Adding pinned icon for: ${appId}`);
 
             const app = Gio.DesktopAppInfo.new(appId + '.desktop') ||
                 Gio.DesktopAppInfo.new(appId);
 
             if (!app) {
-                console.error(`[ERROR] Application not found: ${appId}`);
                 const altPaths = [
                     GLib.build_filenamev([GLib.get_home_dir(), '.local', 'share', 'applications', `${appId}.desktop`]),
                     `/var/lib/flatpak/exports/share/applications/${appId}.desktop`,
@@ -457,12 +453,10 @@ const AppPinner = GObject.registerClass(
                 ];
 
                 for (const path of altPaths) {
-                    console.log(`[DEBUG] Checking alternative path: ${path}`);
                     if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
                         const altApp = Gio.DesktopAppInfo.new_from_filename(path);
                         if (altApp) {
                             app = altApp;
-                            console.log(`[DEBUG] Found alternative app at: ${path}`);
                             break;
                         }
                     }
@@ -729,7 +723,6 @@ const AppPinner = GObject.registerClass(
 
                     isRunning = state === Shell.AppState.RUNNING || hasWindows || isInAppSystem;
 
-                    console.log(`[DEBUG] ${appId} - State: ${state}, Windows: ${hasWindows}, InAppSystem: ${isInAppSystem}`);
                 }
             }
 
@@ -764,25 +757,16 @@ const AppPinner = GObject.registerClass(
         }
 
         _findAppById(appId) {
-            console.log(`[DEBUG] Looking up app: ${appId}`);
             let app = this._appSystem.lookup_app(appId) ||
                 this._appSystem.lookup_app(`${appId}.desktop`);
 
             if (!app) {
-                console.log(`[DEBUG] App not found in AppSystem, trying DesktopAppInfo...`);
                 const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) ||
                     Gio.DesktopAppInfo.new(appId);
 
                 if (gioApp) {
-                    console.log(`[DEBUG] Found via DesktopAppInfo: ${gioApp.get_id()}`);
                     app = this._appSystem.lookup_app(gioApp.get_id());
                 }
-            }
-
-            if (app) {
-                console.log(`[DEBUG] App found: ${app.get_id()} (${app.get_name()})`);
-            } else {
-                console.error(`[DEBUG] App not found in any system: ${appId}`);
             }
 
             return app;
@@ -942,7 +926,6 @@ const AppPinner = GObject.registerClass(
 
                 removeBtn.connect('clicked', () => {
                     this._unpinApp(`link://${url}`);
-                    this.menu.close();
                 });
 
                 item.add_child(removeBtn);
@@ -991,11 +974,7 @@ const AppPinner = GObject.registerClass(
 
         _pinApp(app) {
             const rawAppId = app.get_id();
-            console.log(`[DEBUG] Raw app ID: ${rawAppId}`);
-
             const appId = rawAppId.replace(/\.desktop$/i, '');
-
-            console.log(`[DEBUG] Using app ID: ${appId}`);
 
             const current = this._settings.get_strv('pinned-apps');
             if (!current.includes(appId)) {
@@ -1084,7 +1063,6 @@ export default class AppPinnerExtension extends Extension {
         );
 
         if (foundApp) {
-            console.log(`[DEBUG] Found via AppSystem (case-insensitive): ${foundApp.get_id()}`);
             return Gio.DesktopAppInfo.new(foundApp.get_id());
         }
 
@@ -1096,7 +1074,6 @@ export default class AppPinnerExtension extends Extension {
         for (const path of flatpakPaths) {
             const fullPath = `${path}${appId}.desktop`;
             if (GLib.file_test(fullPath, GLib.FileTest.EXISTS)) {
-                console.log(`[DEBUG] Found Flatpak app at: ${fullPath}`);
                 return Gio.DesktopAppInfo.new_from_filename(fullPath);
             }
         }
@@ -1105,12 +1082,10 @@ export default class AppPinnerExtension extends Extension {
         for (const dataDir of dataDirs) {
             const appPath = `${dataDir}/applications/${appId}.desktop`;
             if (GLib.file_test(appPath, GLib.FileTest.EXISTS)) {
-                console.log(`[DEBUG] Found app in system dir: ${appPath}`);
                 return Gio.DesktopAppInfo.new_from_filename(appPath);
             }
         }
 
-        console.error(`[ERROR] App non trovata in nessun percorso: ${appId}`);
         return null;
     }
 
@@ -1383,13 +1358,7 @@ export default class AppPinnerExtension extends Extension {
 
     _launchAppByPosition(position) {
 
-
-        console.log(`[KEYBINDING] Shortcut ${position} premuta!`);
-
-        console.log(`[DEBUG] Ricevuta richiesta lancio posizione ${position}`);
         const apps = this._settings.get_strv('pinned-apps');
-        console.log(`[DEBUG] App pinnate attuali:`, apps);
-        console.log(`[DEBUG] Indicator stato: ${this._indicator ? "OK" : "UNDEFINED"}`);
 
         if (apps.length === 0) {
             console.error('[ERROR] Nessuna applicazione pinnata');
@@ -1397,7 +1366,6 @@ export default class AppPinnerExtension extends Extension {
         }
 
         const index = position - 1;
-        console.log(`[DEBUG] Indice calcolato: ${index} (lunghezza array: ${apps.length})`);
 
         if (index < 0 || index >= apps.length) {
             console.error(`[ERROR] Indice non valido: ${index} (max: ${apps.length - 1})`);
@@ -1405,8 +1373,6 @@ export default class AppPinnerExtension extends Extension {
         }
 
         const appId = apps[index];
-        console.log(`[DEBUG] Tentativo lancio app ID: ${appId}`);
-        console.log(`[DEBUG] AppId in posizione ${position}: ${appId} (Tipo: ${typeof appId})`);
 
 
         if (!this._indicator) {
@@ -1418,19 +1384,15 @@ export default class AppPinnerExtension extends Extension {
         let app = appSys.lookup_app(`${appId}.desktop`) || appSys.lookup_app(appId);
 
         if (!app) {
-            console.log(`[DEBUG] App non trovata in AppSystem, prova con DesktopAppInfo...`);
             const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
 
             if (!gioApp) {
                 console.error(`[ERROR] App ${appId} non trovata in nessun formato`);
                 return;
             }
-            console.log(`[DEBUG] Trovato DesktopAppInfo:`, gioApp.get_id(), 'Comando:', gioApp.get_commandline());
         } else {
-            console.log(`[DEBUG] Trovato in AppSystem:`, app.get_name(), 'ID:', app.get_id());
         }
 
-        console.log(`[SUCCESS] Chiamata a _launchApp per ${appId}`);
         this._indicator._launchApp(appId);
     }
 
@@ -1554,6 +1516,9 @@ export default class AppPinnerExtension extends Extension {
 
         this._settings.disconnect(this._shortcutHandler);
 
+        const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
+        const dir = Gio.File.new_for_path(autostartDir);
+
         const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
         let fileInfo;
         while ((fileInfo = enumerator.next_file(null)) !== null) {
@@ -1566,9 +1531,6 @@ export default class AppPinnerExtension extends Extension {
         if (this._startupChangedId) {
             this._settings.disconnect(this._startupChangedId);
         }
-
-        const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
-        const dir = Gio.File.new_for_path(autostartDir);
 
         try {
             const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);

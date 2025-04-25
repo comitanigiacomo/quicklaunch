@@ -44,85 +44,238 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         });
         this._buildStartupPage(startupPage, settings);
         window.add(startupPage);
+
+        // Pagina About
+        const aboutPage = new Adw.PreferencesPage({
+            title: 'About',
+            icon_name: 'dialog-information-symbolic'
+        });
+        this._buildAboutPage(aboutPage);
+        window.add(aboutPage);
+    }
+
+    _buildAboutPage(page) {
+        const group = new Adw.PreferencesGroup({
+            title: this.metadata.name,
+            description: 'A modern application pinner and quick launcher for GNOME Shell'
+        });
+
+        // Versione
+        const versionRow = new Adw.ActionRow({
+            title: 'Version'
+        });
+        const versionLabel = new Gtk.Label({
+            label: `v${this.metadata.version.toString()}`,
+            css_classes: ['dim-label'],
+            xalign: 0
+        });
+        versionRow.add_suffix(versionLabel);
+        group.add(versionRow);
+
+        // Autore con link GitHub
+        const authorRow = new Adw.ActionRow({
+            title: 'Developer'
+        });
+
+        const githubButton = new Gtk.Button({
+            label: this.metadata.creator,
+            css_classes: ['flat', 'suggested-action'],
+            tooltip_text: 'Open GitHub profile',
+            margin_top: 6,
+            margin_bottom: 6
+        });
+
+        githubButton.connect('clicked', () => {
+            Gio.AppInfo.launch_default_for_uri('https://github.com/comitanigiacomo', null);
+        });
+
+        authorRow.add_suffix(githubButton);
+        authorRow.activatable_widget = githubButton;
+        group.add(authorRow);
+
+        // Repository
+        const repoRow = new Adw.ActionRow({
+            title: 'Repository'
+        });
+
+        const repoButton = new Gtk.Button({
+            label: 'Source Code',
+            css_classes: ['flat', 'suggested-action'],
+            tooltip_text: 'Open GitHub repository',
+            margin_top: 6,
+            margin_bottom: 6
+        });
+
+        repoButton.connect('clicked', () => {
+            if (this.metadata.url) {
+                Gio.AppInfo.launch_default_for_uri(this.metadata.url, null);
+            }
+        });
+
+        repoRow.add_suffix(repoButton);
+        repoRow.activatable_widget = repoButton;
+        group.add(repoRow);
+
+        // Licenza
+        const licenseRow = new Adw.ActionRow({
+            title: 'License'
+        });
+
+        const licenseButton = new Gtk.Button({
+            label: 'GPLv3',
+            css_classes: ['flat', 'suggested-action'],
+            tooltip_text: 'View license details',
+            margin_top: 6,
+            margin_bottom: 6
+        });
+
+        licenseButton.connect('clicked', () => {
+            Gio.AppInfo.launch_default_for_uri('https://github.com/comitanigiacomo/quicklaunch?tab=GPL-3.0-1-ov-file', null);
+        });
+
+        licenseRow.add_suffix(licenseButton);
+        licenseRow.activatable_widget = licenseButton;
+        group.add(licenseRow);
+
+        // Descrizione estesa
+        const descriptionLabel = new Gtk.Label({
+            label: `
+                
+        ● 🚀  One-Click Access: Launch apps/links directly from panel\n
+        ● ⌨️  Custom Shortcuts: Configurable keyboard combinations\n
+        ● 🔴  Live Indicators: Real-time running app status\n
+        ● 🌐  Web Links: Open URLs in default browser\n
+        ● ⚡  Auto-Start: Launch critical apps at login\n
+        ● 🔧  Smart Reordering: long-press to organize\n
+        ● 🔍  Instant Search: Find/pin apps from dropdown\n\n
+        Optimized for power users - Seamless GNOME integration
+            `
+                .replace(/ {8}/g, '') // Rimuove l'indentazione
+                .trim(),
+            wrap: true,
+            xalign: 0.5,
+            halign: Gtk.Align.CENTER,
+            hexpand: true
+        });
+
+        const descGroup = new Adw.PreferencesGroup();
+        descGroup.add(descriptionLabel);
+
+        page.add(group);
+        page.add(descGroup);
     }
 
     _buildShortcutsPage(page, settings) {
         const group = new Adw.PreferencesGroup({
             title: 'Keyboard Shortcuts',
-            description: 'Click on a field and press the desired key combination'
+            description: 'Assign custom keyboard shortcuts to launch your pinned apps directly.\nShortcuts are position-based and will follow your current app order.'
         });
 
-        for (let i = 1; i <= 10; i++) {
-            const row = new Adw.ActionRow({
-                title: `Position ${i}`,
-            });
+        const listBox = new Gtk.ListBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            css_classes: ['shortcut-list']
+        });
 
-            const entry = new Gtk.Entry({
-                text: this._acceleratorToLabel(settings.get_string(`shortcut-${i}`)),
-                editable: false,
-                width_chars: 20,
-                css_classes: ['shortcut-entry']
-            });
+        const updateList = () => {
+            let child = listBox.get_first_child();
+            while (child) {
+                const next = child.get_next_sibling();
+                listBox.remove(child);
+                child = next;
+            }
 
-            // SOSTITUIAMO focus-out-event con notify::has-focus
-            entry.connect('notify::has-focus', (widget) => {
-                if (!widget.hasFocus) {
-                    widget.set_selection(0, 0);
-                    widget.set_position(-1);
-                }
-            });
+            const pinnedApps = settings.get_strv('pinned-apps');
+            if (pinnedApps.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: 'No Pinned Apps',
+                    subtitle: 'Pin apps from the main menu to enable shortcuts',
+                    css_classes: ['dim-label']
+                });
+                listBox.append(emptyRow);
+                return;
+            }
 
-            // Aggiungiamo un controller per gli eventi della tastiera
-            const controller = new Gtk.EventControllerKey();
-            let modifiers = 0;
+            pinnedApps.forEach((appId, index) => {
+                const position = index + 1;
+                const appName = this._getAppName(appId) || 'Unknown Application';
 
-            controller.connect('key-pressed', (_, keyval, _keycode, state) => {
+                const row = new Adw.ActionRow({
+                    title: `Position ${position}`,
+                    subtitle: appName,
+                    css_classes: ['shortcut-row']
+                });
 
-                if (keyval === Gdk.KEY_Escape) {
-                    entry.grab_focus_away();
+                const entry = new Gtk.Entry({
+                    text: this._acceleratorToLabel(settings.get_string(`shortcut-${position}`)),
+                    editable: false,
+                    width_chars: 20,
+                    css_classes: ['shortcut-entry'],
+                    placeholder_text: 'Click to set shortcut',
+                    tooltip_text: `Press any key combination for ${appName}`
+                });
+
+                entry.connect('notify::has-focus', (widget) => {
+                    if (!widget.hasFocus) {
+                        widget.set_selection(0, 0);
+                        widget.set_position(-1);
+                    }
+                });
+
+                const controller = new Gtk.EventControllerKey();
+                controller.connect('key-pressed', (_, keyval, _keycode, state) => {
+                    if (keyval === Gdk.KEY_Escape) {
+                        entry.grab_focus_away();
+                        return Gdk.EVENT_STOP;
+                    }
+
+                    const isModifier = [
+                        Gdk.KEY_Control_L, Gdk.KEY_Control_R,
+                        Gdk.KEY_Shift_L, Gdk.KEY_Shift_R,
+                        Gdk.KEY_Alt_L, Gdk.KEY_Alt_R,
+                        Gdk.KEY_Super_L, Gdk.KEY_Super_R
+                    ].includes(keyval);
+
+                    if (isModifier) return Gdk.EVENT_STOP;
+
+                    const modifiers = state & Gtk.accelerator_get_default_mod_mask();
+                    const accelerator = Gtk.accelerator_name(keyval, modifiers);
+
+                    entry.text = this._acceleratorToLabel(accelerator);
+                    settings.set_string(`shortcut-${position}`, accelerator);
                     return Gdk.EVENT_STOP;
-                }
-                // Ignora i tasti modificatori da soli
-                const isModifier = [
-                    Gdk.KEY_Control_L, Gdk.KEY_Control_R,
-                    Gdk.KEY_Shift_L, Gdk.KEY_Shift_R,
-                    Gdk.KEY_Alt_L, Gdk.KEY_Alt_R,
-                    Gdk.KEY_Super_L, Gdk.KEY_Super_R
-                ].includes(keyval);
+                });
 
-                if (isModifier) return Gdk.EVENT_STOP;
+                entry.add_controller(controller);
 
-                // Calcola i modificatori attivi
-                modifiers = state & Gtk.accelerator_get_default_mod_mask();
+                const clearButton = new Gtk.Button({
+                    icon_name: 'edit-clear-symbolic',
+                    tooltip_text: 'Clear shortcut'
+                });
 
-                // Converti in acceleratore
-                const accelerator = Gtk.accelerator_name(keyval, modifiers);
+                clearButton.connect('clicked', () => {
+                    entry.text = 'Disabled';
+                    settings.set_string(`shortcut-${position}`, '');
+                });
 
-                // Aggiorna l'UI e le impostazioni
-                entry.text = this._acceleratorToLabel(accelerator);
-                settings.set_string(`shortcut-${i}`, accelerator);
-
-                return Gdk.EVENT_STOP;
+                row.add_suffix(entry);
+                row.add_suffix(clearButton);
+                listBox.append(row);
             });
+        };
 
-            entry.add_controller(controller);
+        // Aggiorna alla prima creazione
+        updateList();
 
-            // Pulsante per cancellare la scorciatoia
-            const clearButton = new Gtk.Button({
-                icon_name: 'edit-clear-symbolic',
-                tooltip_text: 'Clear shortcut'
-            });
+        settings.connect('changed::pinned-apps', () => {
+            updateList();
+        });
 
-            clearButton.connect('clicked', () => {
-                entry.text = 'Disabled';
-                settings.set_string(`shortcut-${i}`, '');
-            });
+        const scrolledWindow = new Gtk.ScrolledWindow({
+            height_request: 300,
+            child: listBox
+        });
 
-            row.add_suffix(entry);
-            row.add_suffix(clearButton);
-            group.add(row);
-        }
-
+        group.add(scrolledWindow);
         page.add(group);
     }
 
@@ -339,11 +492,15 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
     }
 
     _buildAppearancePage(page, settings) {
-        const group = new Adw.PreferencesGroup();
+        const group = new Adw.PreferencesGroup({
+            title: 'Panel Customization',
+            description: 'Adjust how pinned apps appear in your top panel'
+        });
 
-        // Dimensioni icone 1-9 (16-24px)
+        // Dimensione Icone
         const iconSizeRow = new Adw.SpinRow({
-            title: 'Icon Size (px)',
+            title: 'Icon Size',
+            subtitle: 'Recommended between 16-24 pixels for optimal panel integration',
             adjustment: new Gtk.Adjustment({
                 value: settings.get_int('icon-size'),
                 lower: 16,
@@ -357,6 +514,7 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         // Posizione
         const positionRow = new Adw.ComboRow({
             title: 'Panel Position',
+            subtitle: 'Choose where to show the pinned apps in your top panel',
             model: new Gtk.StringList({ strings: ['left', 'center', 'right'] })
         });
 
@@ -372,11 +530,12 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
 
         // Spaziatura
         const spacingRow = new Adw.SpinRow({
-            title: 'Spacing Between Icons',
+            title: 'Icon Spacing',
+            subtitle: 'Space between app icons in pixels',
             adjustment: new Gtk.Adjustment({
                 value: settings.get_int('spacing'),
                 lower: 0,
-                upper: 10,
+                upper: 20,
                 step_increment: 1
             })
         });
@@ -450,31 +609,16 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
             const row = listItem.get_child();
             const toggle = row._toggle;
 
-            // Aggiorna lo stato dell'interruttore
             const startupApps = settings.get_strv('startup-apps');
-            const isActive = startupApps.includes(appId);
-            toggle.set_active(isActive);
+            toggle.set_active(startupApps.includes(appId));
 
-            // Connetti il segnale dopo aver impostato lo stato iniziale
             toggle.connect('notify::active', (sw) => {
-                const newActive = sw.active;
-
-                const currentStartup = settings.get_strv('startup-apps');
-
-                const newStartupApps = newActive
-                    ? [...currentStartup, appId]
-                    : currentStartup.filter(id => id !== appId);
-
-                settings.set_strv('startup-apps', newStartupApps);
-
-                // Verifica immediata dello stato salvato
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                    const verify = settings.get_strv('startup-apps');
-                    return GLib.SOURCE_REMOVE;
-                });
+                const newStartup = sw.active
+                    ? [...settings.get_strv('startup-apps'), appId]
+                    : settings.get_strv('startup-apps').filter(id => id !== appId);
+                settings.set_strv('startup-apps', newStartup);
             });
 
-            // Aggiorna icona e nome
             const appInfo = this._getAppInfo(appId);
             row.set_title(appInfo?.get_name() || appId);
             row._icon.set_from_gicon(appInfo?.get_icon());
@@ -491,11 +635,6 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         });
         group.add(scrolledWindow);
         page.add(group);
-
-        // Aggiungi listener per cambiamenti nelle impostazioni
-        settings.connect('changed::startup-apps', () => {
-            console.log('[STARTUP] Impostazioni startup-apps cambiate:', settings.get_strv('startup-apps'));
-        });
     }
 
     _getAppDisplayInfo(appId) {

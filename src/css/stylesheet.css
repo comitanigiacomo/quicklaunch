@@ -1,6 +1,61 @@
+/* MAIN CONTAINERS */
+.app-pinner-icons {
+    height: 100%;
+    padding: 0 2px;
+}
+
+.app-pinner-icon-box {
+    height: 100%;
+    padding: 2px 0;
+    margin: auto 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+/* ICON STYLES */
+.app-pinner-icon {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    margin: auto;
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+}
+
+.app-pinner-link-icon {
+    margin: auto;
+    -st-icon-style: symbolic;
+}
+
+/* RUNNING INDICATOR */
+.app-pinner-running-indicator {
+    background-color: #ff0000;
+    border-radius: 4px;
+    width: 8px;
+    height: 8px;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+
+/* LABELS */
+.app-pinner-label {
+    max-width: 100px;
+    text-overflow: ellipsis;
+    font-size: 0.8em;
+    margin-top: 2px;
+}
+
+/* CONTEXT MENU ITEMS */
 .app-pinner-remove-btn {
+    font-size: 18px;
     background-color: transparent;
-    border-radius: 50px;
+    border-radius: 100px;
     min-width: 18px;
     min-height: 18px;
     padding: 2px;
@@ -10,6 +65,10 @@
     transition: background-color 0.2s ease-in-out;
 }
 
+.app-pinner-remove-btn:hover {
+    background-color: rgba(255, 0, 0, 0.8);
+}
+
 .app-pinner-remove-label {
     font-size: 16px;
     font-weight: bold;
@@ -17,57 +76,65 @@
     text-align: center;
 }
 
-.app-pinner-remove-btn:hover {
-    background-color: rgba(255, 0, 0, 0.8);
-    border-radius: 50px;
-}
-
+/* SEARCH BOX */
 .search-box {
     width: 200px;
-    justify-content: center;
-    align-items: center;
     padding: 8px 0;
     display: flex;
-    text-align: center;
     align-items: center;
+    justify-content: center;
 }
 
-.app-pinner-running-indicator {
-    background-color: #ff0000;
-    border-radius: 4px;
-    width: 8px;
-    height: 8px;
-    position: absolute;
-    top: 0;
-    right: 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    z-index: 1000;
+/* LINK INPUT */
+.app-pinner-link-input {
+    min-width: 200px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background-color: rgba(0,0,0,0.3);
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.2);
+    font-size: 13px;
 }
 
-.app-pinner-icon-container {
-    position: relative;
+.app-pinner-link-input:focus {
+    border-color: #3584e4;
+    box-shadow: inset 0 0 0 1px #3584e4;
 }
 
-.app-pinner-icon-box {
-    position: relative; /* Necessario per il posizionamento assoluto dell'indicatore */
-}
-
+/* ADD BUTTON */
 .app-pinner-add-link-btn {
+    background-color: rgba(78, 166, 78, 0.8);
+    border-radius: 8px;
+    min-width: 32px;
+    min-height: 32px;
     padding: 6px;
     margin-left: 6px;
+    transition: all 0.2s ease-in-out;
 }
 
 .app-pinner-add-link-btn:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(98, 196, 98, 0.9);
+    transform: scale(1.05);
 }
 
-.app-pinner-label {
-    max-width: 100px;
-    text-overflow: ellipsis;
+.app-pinner-add-link-btn:active {
+    background-color: rgba(68, 146, 68, 0.9);
 }
 
+/* POSITIONING FIXES */
+.app-pinner-icon-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+}
 
-.app-pinner-remove-btn {
-    margin-left: 15px;
+.app-pinner-link-box {
+    margin: 8px;
     padding: 6px;
+    background-color: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
 }

@@ -4,5 +4,8 @@
   "uuid": "quicklaunch@comitanigiacomo.github.com",
   "shell-version": ["47"],
   "settings-schema": "org.gnome.shell.extensions.app-pinner",
-  "stylesheet": "stylesheet.css"
+  "stylesheet": "stylesheet.css",
+  "version": 1.0,
+  "creator":"comitanigiacomo",
+  "url": "https://github.com/comitanigiacomo/quicklaunch"
 }

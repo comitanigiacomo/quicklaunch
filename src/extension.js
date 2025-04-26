@@ -1,6 +1,5 @@
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
-import Gdk from 'gi://Gdk?version=4.0';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
@@ -13,6 +12,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const AppPinner = GObject.registerClass(
     class AppPinner extends PanelMenu.Button {
+        
+        // 1. Costruttore e inizializzazione
         _init(settings) {
             super._init(0.0, _('App Pinner'));
             this._settings = settings;
@@ -76,7 +77,7 @@ const AppPinner = GObject.registerClass(
 
             this.menu.actor.connect('button-press-event', (actor, event) => {
                 const target = event.get_source();
-                
+
                 if (!this.menu.actor.contains(target)) {
                     this.menu.close();
                 }
@@ -114,38 +115,36 @@ const AppPinner = GObject.registerClass(
             );
         }
 
-        _handleWakeupEvent() {
-            setTimeout(() => {
-                this._updateRunningIndicators();
-                this._refreshUI();
-            }, 2000);
-        }
+        // 2. Metodi lifecycle e gestione stato
+        destroy() {
+            if (this._destroyed) return;
+            this._destroyed = true;
 
-        _handleSleepSignal(sender, signalName, params) {
-            const [isSleeping] = params.deepUnpack();
-            if (!isSleeping) {
-                
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
-                    this._forceFullRefresh();
-                    return GLib.SOURCE_REMOVE;
-                });
+            if (this._logindId && this._logindProxy) {
+                this._logindProxy.disconnect(this._logindId);
+                this._logindProxy.run_dispose();
             }
+
+            if (this._logindProxy) {
+                this._logindProxy.run_dispose();
+                this._logindProxy = null;
+            }
+
+            this._settingsHandler?.forEach(h => this._settings.disconnect(h));
+            this._settingsHandler = null;
+
+            this._pinnedIconsBox?.destroy();
+            this._searchInput?.destroy();
+
+            if (this._appStateChangedId) {
+                this._appSystem.disconnect(this._appStateChangedId);
+                this._appStateChangedId = null;
+            }
+
+            super.destroy();
         }
 
-        _updateIconsSpacing() {
-            const spacing = Math.min(20, Math.max(0, this._settings.get_int('spacing')));
-            this._pinnedIconsBox.set_style(`spacing: ${spacing}px;`);
-        }
-
-        _getPanelPosition() {
-            const position = this._settings.get_string('position-in-panel');
-            return {
-                left: Clutter.ActorAlign.START,
-                center: Clutter.ActorAlign.CENTER,
-                right: Clutter.ActorAlign.END
-            }[position] || Clutter.ActorAlign.FILL;
-        }
-
+        // 3. Costruzione UI principale
         _buildMenu() {
             this.menu.removeAll();
 
@@ -218,222 +217,6 @@ const AppPinner = GObject.registerClass(
             linkSection.actor.add_child(linkBox);
         }
 
-        _isValidUrl(url) {
-            try {
-                new URL(url);
-                return true;
-            } catch {
-                return url.startsWith('http') || url.startsWith('ftp');
-            }
-        }
-
-        _pinLink(url) {
-            if (!url) return;
-            if (!url.includes('://')) url = `http://${url}`;
-
-            const links = this._settings.get_strv('custom-links');
-            const pinnedApps = this._settings.get_strv('pinned-apps');
-
-            if (!links.includes(url)) {
-                const newLinks = [...links, url];
-                const newPinnedApps = [...pinnedApps, `link://${url}`];
-
-                this._settings.set_strv('custom-links', newLinks);
-                this._settings.set_strv('pinned-apps', newPinnedApps);
-                this._refreshUI();
-            }
-        }
-
-        async _updateSearch() {
-            this._resultsSection.box.destroy_all_children();
-            const query = this._searchInput.get_text().trim().toLowerCase();
-            if (!query) return;
-
-            const iconSize = this._settings.get_int('icon-size');
-            const appSys = Shell.AppSystem.get_default();
-
-            const results = appSys.get_installed()
-                .filter(app => {
-                    const appId = this._sanitizeAppId(app.get_id());
-                    return !this._isPinned(appId) &&
-                        this._matchQuery(query, app.get_name().toLowerCase());
-                })
-                .sort((a, b) => this._sortApps(a, b, query))
-                .slice(0, 10);
-
-            if (results.length === 0) {
-                this._resultsSection.box.add_child(
-                    new PopupMenu.PopupMenuItem(_('No results found'))
-                );
-                return;
-            }
-
-            results.forEach(app => {
-                const item = new PopupMenu.PopupMenuItem(app.get_name());
-                const icon = new St.Icon({
-                    gicon: app.get_icon(),
-                    icon_size: iconSize
-                });
-                item.insert_child_at_index(icon, 0);
-
-                item.connect('activate', () => {
-                    this._pinApp(app);
-
-                    this._searchInput.set_text('');
-                    this._updateSearch();
-
-                    this.menu.close();
-
-                });
-
-                this._resultsSection.box.add_child(item);
-            });
-
-            this.menu.actor.show_all();
-            this.menu.actor.queue_redraw();
-
-            Clutter.Threads.add_timeout(0, () => {
-                this.menu.queue_relayout();
-                return GLib.SOURCE_REMOVE;
-            });
-        }
-
-        _sanitizeAppId(appId) {
-            const sanitized = appId
-                .replace(/\.desktop$/i, '')
-                .replace(/^application:\/\//i, '');
-            return sanitized;
-        }
-
-        _matchQuery(query, appName) {
-            const keywords = appName.split(/[\s-]/);
-            return appName.includes(query) ||
-                keywords.some(k => k.startsWith(query)) ||
-                this._fuzzyMatch(query, appName);
-        }
-
-        _fuzzyMatch(pattern, str) {
-            let patternIndex = 0;
-            for (const char of str.toLowerCase()) {
-                if (char === pattern[patternIndex]) {
-                    if (++patternIndex === pattern.length) return true;
-                }
-            }
-            return false;
-        }
-
-        _launchApp(appId) {
-            try {
-                const appSystem = Shell.AppSystem.get_default();
-                let app = appSystem.lookup_app(`${appId}.desktop`) || appSystem.lookup_app(appId);
-
-                if (!app) {
-                    const desktopApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
-                    if (desktopApp) {
-                        app = new Shell.App({ desktop_app_info: desktopApp });
-                    }
-                    if (!app) {
-                        console.error(`[ERROR] Application ${appId} not found`);
-                        return;
-                    }
-                }
-
-                this._pendingApps.add(appId);
-
-                app.activate();
-
-                this._forceImmediateUpdate(appId);
-
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-                    this._pendingApps.delete(appId);
-                    this._updateRunningIndicators();
-                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-                        this._updateRunningIndicators();
-                        return GLib.SOURCE_REMOVE;
-                    });
-                    return GLib.SOURCE_REMOVE;
-                });
-
-            } catch (e) {
-                this._pendingApps.delete(appId);
-            }
-
-            this._pendingApps.add(appId);
-            this._updateRunningIndicators();
-        }
-
-
-        _getIndicatorForApp(appId) {
-            const iconBox = this._pinnedIconsBox.get_children().find(b => b.appId === appId);
-            return iconBox ? iconBox.runningIndicator : null;
-        }
-
-        _forceImmediateUpdate(appId) {
-            const indicator = this._getIndicatorForApp(appId);
-            if (indicator) {
-                indicator.visible = true;
-                indicator.opacity = 0;
-                indicator.set_scale(0.5, 0.5);
-                indicator.ease({
-                    opacity: 255,
-                    scale_x: 1,
-                    scale_y: 1,
-                    duration: 300,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD
-                });
-            }
-            this._updateRunningIndicators();
-        }
-
-
-        _sortApps(a, b, query) {
-            const aName = a.get_name().toLowerCase();
-            const bName = b.get_name().toLowerCase();
-
-            if (aName === query) return -1;
-            if (bName === query) return 1;
-
-            const aStart = aName.startsWith(query);
-            const bStart = bName.startsWith(query);
-            if (aStart !== bStart) return aStart ? -1 : 1;
-
-            return aName.length - bName.length;
-        }
-
-        _refreshUI() {
-            if (this._destroyed) return;
-
-            const schema = this._settings.settings_schema;
-            const key = schema.get_key('icon-size');
-            const range = key.get_range();
-            const [minSize, maxIconSize] = range.deep_unpack();
-
-            const pinnedApps = this._settings.get_strv('pinned-apps');
-            const spacing = this._settings.get_int('spacing');
-            const totalItems = pinnedApps.length;
-
-            const containerWidth = (maxIconSize * totalItems) + (spacing * Math.max(0, totalItems - 1));
-
-            this._mainContainer.set_style(`
-                min-width: ${containerWidth}px;
-                padding: 0 ${spacing}px;
-            `);
-
-            this._pinnedIconsBox.destroy_all_children();
-
-            pinnedApps.forEach(appId => {
-                const app = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
-                if (app) {
-                    this._addPinnedIcon(appId);
-                } else if (appId.startsWith('link://')) {
-                    this._addPinnedIcon(appId);
-                }
-            });
-
-            this._pinnedSection.box.destroy_all_children();
-            pinnedApps.forEach(appId => this._addMenuPinnedItem(appId));
-        }
-
         _addPinnedIcon(appId) {
 
             if (appId.startsWith('link://')) {
@@ -468,7 +251,6 @@ const AppPinner = GObject.registerClass(
                 }
             }
 
-            const iconSize = this._settings.get_int('icon-size');
             const showLabels = this._settings.get_boolean('enable-labels');
 
             const iconBox = new St.BoxLayout({
@@ -673,33 +455,66 @@ const AppPinner = GObject.registerClass(
             return iconBox;
         }
 
-        _shortenUrl(url) {
+        // 4. Gestione interazioni utente
+        _launchApp(appId) {
+
+            if (appId.startsWith('link://')) {
+                const url = appId.replace('link://', '');
+                Gio.AppInfo.launch_default_for_uri(url, null);
+                return;
+            }
             try {
-                const parsed = new URL(url);
-                return parsed.hostname.replace(/^www\./i, '');
-            } catch {
-                return url.substring(0, 15) + '...';
+                const appSystem = Shell.AppSystem.get_default();
+                let app = appSystem.lookup_app(`${appId}.desktop`) || appSystem.lookup_app(appId);
+
+                if (!app) {
+                    const desktopApp = Gio.DesktopAppInfo.new(`${appId}.desktop`);
+                    if (desktopApp) {
+                        app = new Shell.App({ desktop_app_info: desktopApp });
+                    }
+                    if (!app) {
+                        console.error(`[ERROR] Application ${appId} not found`);
+                        return;
+                    }
+                }
+
+                this._pendingApps.add(appId);
+
+                app.activate();
+
+                this._forceImmediateUpdate(appId);
+
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+                    this._pendingApps.delete(appId);
+                    this._updateRunningIndicators();
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                        this._updateRunningIndicators();
+                        return GLib.SOURCE_REMOVE;
+                    });
+                    return GLib.SOURCE_REMOVE;
+                });
+
+            } catch (e) {
+                this._pendingApps.delete(appId);
+            }
+
+            this._pendingApps.add(appId);
+            this._updateRunningIndicators();
+        }
+
+        _handleSleepSignal(sender, signalName, params) {
+            const [isSleeping] = params.deepUnpack();
+            if (!isSleeping) {
+
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
+                    this._forceFullRefresh();
+                    return GLib.SOURCE_REMOVE;
+                });
             }
         }
 
-        _forceFullRefresh() {
-            this._runningTracker = new Set(
-                this._appSystem.get_running().map(app => this._sanitizeAppId(app.get_id()))
-            );
-
-            this._pinnedIconsBox.get_children().forEach(iconBox => {
-                this._updateRunningIndicator(iconBox.appId, iconBox.runningIndicator);
-            });
-
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
-                this._appSystem = Shell.AppSystem.get_default();
-                this._updateRunningIndicators();
-                return GLib.SOURCE_REMOVE;
-            });
-        }
-
+        // 5. Gestione stato applicazioni
         _updateRunningIndicators() {
-            const pinnedApps = this._settings.get_strv('pinned-apps');
             const children = this._pinnedIconsBox.get_children();
 
             children.forEach(iconBox => {
@@ -756,6 +571,270 @@ const AppPinner = GObject.registerClass(
             }
         }
 
+        // 6. Gestione impostazioni e aggiornamenti UI
+        _refreshUI() {
+            if (this._destroyed) return;
+
+            const schema = this._settings.settings_schema;
+            const key = schema.get_key('icon-size');
+            const range = key.get_range();
+            const [minSize, maxIconSize] = range.deep_unpack();
+
+            const pinnedApps = this._settings.get_strv('pinned-apps');
+            const spacing = this._settings.get_int('spacing');
+            const totalItems = pinnedApps.length;
+
+            const containerWidth = (maxIconSize * totalItems) + (spacing * Math.max(0, totalItems - 1));
+
+            this._mainContainer.set_style(`
+                min-width: ${containerWidth}px;
+                padding: 0 ${spacing}px;
+            `);
+
+            this._pinnedIconsBox.destroy_all_children();
+
+            pinnedApps.forEach(appId => {
+                const app = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
+                if (app) {
+                    this._addPinnedIcon(appId);
+                } else if (appId.startsWith('link://')) {
+                    this._addPinnedIcon(appId);
+                }
+            });
+
+            this._pinnedSection.box.destroy_all_children();
+            pinnedApps.forEach(appId => this._addMenuPinnedItem(appId));
+        }
+
+        _updateIconsSpacing() {
+            const spacing = Math.min(20, Math.max(0, this._settings.get_int('spacing')));
+            this._pinnedIconsBox.set_style(`spacing: ${spacing}px;`);
+        }
+
+        // 7. Gestione elementi pinnati
+        _pinApp(app) {
+
+            const current = this._settings.get_strv('pinned-apps');
+            if (current.length >= 10) {
+                this._showMaxItemsError();
+                return;
+            }
+
+            const rawAppId = app.get_id();
+            const appId = rawAppId.replace(/\.desktop$/i, '');
+
+            if (!current.includes(appId)) {
+                const updated = [...current, appId];
+                this._settings.set_strv('pinned-apps', updated);
+            }
+        }
+
+        _unpinApp(appId) {
+            if (appId.startsWith('link://')) {
+                const url = appId.replace('link://', '');
+                const links = this._settings.get_strv('custom-links')
+                    .filter(l => l !== url);
+                this._settings.set_strv('custom-links', links);
+            }
+
+            const startupApps = this._settings.get_strv('startup-apps')
+                .filter(id => id !== appId);
+            this._settings.set_strv('startup-apps', startupApps);
+
+            const pinnedApps = this._settings.get_strv('pinned-apps')
+                .filter(id => id !== appId);
+            this._settings.set_strv('pinned-apps', pinnedApps);
+        }
+
+        _isPinned(appId) {
+            const cleanAppId = this._sanitizeAppId(appId);
+            return this._settings.get_strv('pinned-apps').includes(cleanAppId);
+        }
+
+        // 8. Funzioni helper e utilità
+        _isValidUrl(url) {
+            try {
+                new URL(url);
+                return true;
+            } catch {
+                return url.startsWith('http') || url.startsWith('ftp');
+            }
+        }
+
+        _sortApps(a, b, query) {
+            const aName = a.get_name().toLowerCase();
+            const bName = b.get_name().toLowerCase();
+
+            if (aName === query) return -1;
+            if (bName === query) return 1;
+
+            const aStart = aName.startsWith(query);
+            const bStart = bName.startsWith(query);
+            if (aStart !== bStart) return aStart ? -1 : 1;
+
+            return aName.length - bName.length;
+        }
+
+        _handleWakeupEvent() {
+            setTimeout(() => {
+                this._updateRunningIndicators();
+                this._refreshUI();
+            }, 2000);
+        }
+
+        _pinLink(url) {
+
+            const pinnedApps = this._settings.get_strv('pinned-apps');
+            if (pinnedApps.length >= 10) {
+                this._showMaxItemsError();
+                return;
+            }
+
+            if (!url) return;
+            if (!url.includes('://')) url = `http://${url}`;
+
+            const links = this._settings.get_strv('custom-links');
+
+            if (!links.includes(url)) {
+                const newLinks = [...links, url];
+                const newPinnedApps = [...pinnedApps, `link://${url}`];
+
+                this._settings.set_strv('custom-links', newLinks);
+                this._settings.set_strv('pinned-apps', newPinnedApps);
+                this._refreshUI();
+            }
+        }
+
+        async _updateSearch() {
+            this._resultsSection.box.destroy_all_children();
+            const query = this._searchInput.get_text().trim().toLowerCase();
+            if (!query) return;
+
+            const iconSize = this._settings.get_int('icon-size');
+            const appSys = Shell.AppSystem.get_default();
+
+            const results = appSys.get_installed()
+                .filter(app => {
+                    const appId = this._sanitizeAppId(app.get_id());
+                    return !this._isPinned(appId) &&
+                        this._matchQuery(query, app.get_name().toLowerCase());
+                })
+                .sort((a, b) => this._sortApps(a, b, query))
+                .slice(0, 10);
+
+            if (results.length === 0) {
+                this._resultsSection.box.add_child(
+                    new PopupMenu.PopupMenuItem(_('No results found'))
+                );
+                return;
+            }
+
+            results.forEach(app => {
+                const item = new PopupMenu.PopupMenuItem(app.get_name());
+                const icon = new St.Icon({
+                    gicon: app.get_icon(),
+                    icon_size: iconSize
+                });
+                item.insert_child_at_index(icon, 0);
+
+                if (this._settings.get_strv('pinned-apps').length >= 10) {
+                    item.setSensitive(false);
+                    item.label.text = _("Max items reached - unpin something first");
+                }
+
+                item.connect('activate', () => {
+                    this._pinApp(app);
+
+                    this._searchInput.set_text('');
+                    this._updateSearch();
+
+                    this.menu.close();
+
+                });
+
+                this._resultsSection.box.add_child(item);
+            });
+
+            this.menu.actor.show_all();
+            this.menu.actor.queue_redraw();
+
+            Clutter.Threads.add_timeout(0, () => {
+                this.menu.queue_relayout();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        _sanitizeAppId(appId) {
+            const sanitized = appId
+                .replace(/\.desktop$/i, '')
+                .replace(/^application:\/\//i, '');
+            return sanitized;
+        }
+
+        _matchQuery(query, appName) {
+            const keywords = appName.split(/[\s-]/);
+            return appName.includes(query) ||
+                keywords.some(k => k.startsWith(query)) ||
+                this._fuzzyMatch(query, appName);
+        }
+
+        _fuzzyMatch(pattern, str) {
+            let patternIndex = 0;
+            for (const char of str.toLowerCase()) {
+                if (char === pattern[patternIndex]) {
+                    if (++patternIndex === pattern.length) return true;
+                }
+            }
+            return false;
+        }
+
+        _getIndicatorForApp(appId) {
+            const iconBox = this._pinnedIconsBox.get_children().find(b => b.appId === appId);
+            return iconBox ? iconBox.runningIndicator : null;
+        }
+
+        _forceImmediateUpdate(appId) {
+            const indicator = this._getIndicatorForApp(appId);
+            if (indicator) {
+                indicator.visible = true;
+                indicator.opacity = 0;
+                indicator.set_scale(0.5, 0.5);
+                indicator.ease({
+                    opacity: 255,
+                    scale_x: 1,
+                    scale_y: 1,
+                    duration: 300,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD
+                });
+            }
+            this._updateRunningIndicators();
+        }
+
+        _shortenUrl(url) {
+            try {
+                const parsed = new URL(url);
+                return parsed.hostname.replace(/^www\./i, '');
+            } catch {
+                return url.substring(0, 15) + '...';
+            }
+        }
+
+        _forceFullRefresh() {
+            this._runningTracker = new Set(
+                this._appSystem.get_running().map(app => this._sanitizeAppId(app.get_id()))
+            );
+
+            this._pinnedIconsBox.get_children().forEach(iconBox => {
+                this._updateRunningIndicator(iconBox.appId, iconBox.runningIndicator);
+            });
+
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+                this._appSystem = Shell.AppSystem.get_default();
+                this._updateRunningIndicators();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
         _findAppById(appId) {
             let app = this._appSystem.lookup_app(appId) ||
                 this._appSystem.lookup_app(`${appId}.desktop`);
@@ -770,24 +849,6 @@ const AppPinner = GObject.registerClass(
             }
 
             return app;
-        }
-
-        animateAndMoveToEnd(appId, iconBox) {
-            iconBox.ease({
-                scale_x: 1.5,
-                scale_y: 1.5,
-                opacity: 0,
-                rotation_angle_z: 360,
-                duration: 800,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                onComplete: () => {
-                    const current = this._settings.get_strv('pinned-apps');
-                    const newOrder = current.filter(id => id !== appId).concat(appId);
-                    this._settings.set_strv('pinned-apps', newOrder);
-
-                    this._refreshUIWithEffect();
-                }
-            });
         }
 
         _refreshUIWithEffect() {
@@ -808,44 +869,6 @@ const AppPinner = GObject.registerClass(
                 );
                 return GLib.SOURCE_REMOVE;
             });
-        }
-
-        _calculateNewPosition(delta) {
-            const children = this._pinnedIconsBox.get_children();
-            const spacing = this._settings.get_int('spacing');
-            const iconWidth = this._settings.get_int('icon-size') + spacing;
-            return Math.min(
-                children.length - 1,
-                Math.max(0, this._currentIndex + Math.round(delta / iconWidth))
-            );
-        }
-
-        _reorderIcons(oldIndex, newIndex) {
-            if (oldIndex === newIndex) return;
-
-            const children = this._pinnedIconsBox.get_children();
-            if (oldIndex < 0 || oldIndex >= children.length || newIndex < 0 || newIndex >= children.length) {
-                console.error('Indici non validi per il riordinamento:', oldIndex, newIndex);
-                return;
-            }
-
-            const item = children[oldIndex];
-            this._pinnedIconsBox.remove_child(item);
-            this._pinnedIconsBox.insert_child_at_index(item, newIndex);
-        }
-
-        _saveNewOrder() {
-            const newOrder = this._pinnedIconsBox.get_children()
-                .map(child => child.appId)
-                .filter(id => id && typeof id === 'string');
-
-            if (arraysEqual(newOrder, this._settings.get_strv('pinned-apps'))) return;
-
-            try {
-                this._settings.set_strv('pinned-apps', newOrder);
-            } catch (e) {
-                console.error('Errore nel salvataggio delle impostazioni:', e);
-            }
         }
 
         _animateAndMoveToEnd(appId, iconBox) {
@@ -971,67 +994,6 @@ const AppPinner = GObject.registerClass(
                 this._pinnedSection.box.add_child(item);
             }
         }
-
-        _pinApp(app) {
-            const rawAppId = app.get_id();
-            const appId = rawAppId.replace(/\.desktop$/i, '');
-
-            const current = this._settings.get_strv('pinned-apps');
-            if (!current.includes(appId)) {
-                const updated = [...current, appId];
-                this._settings.set_strv('pinned-apps', updated);
-            }
-        }
-
-        _unpinApp(appId) {
-            if (appId.startsWith('link://')) {
-                const url = appId.replace('link://', '');
-                const links = this._settings.get_strv('custom-links')
-                    .filter(l => l !== url);
-                this._settings.set_strv('custom-links', links);
-            }
-
-            const startupApps = this._settings.get_strv('startup-apps')
-                .filter(id => id !== appId);
-            this._settings.set_strv('startup-apps', startupApps);
-
-            const pinnedApps = this._settings.get_strv('pinned-apps')
-                .filter(id => id !== appId);
-            this._settings.set_strv('pinned-apps', pinnedApps);
-        }
-
-        _isPinned(appId) {
-            const cleanAppId = this._sanitizeAppId(appId);
-            return this._settings.get_strv('pinned-apps').includes(cleanAppId);
-        }
-
-        destroy() {
-            if (this._destroyed) return;
-            this._destroyed = true;
-
-            if (this._logindId && this._logindProxy) {
-                this._logindProxy.disconnect(this._logindId);
-                this._logindProxy.run_dispose();
-            }
-
-            if (this._logindProxy) {
-                this._logindProxy.run_dispose();
-                this._logindProxy = null;
-            }
-
-            this._settingsHandler?.forEach(h => this._settings.disconnect(h));
-            this._settingsHandler = null;
-
-            this._pinnedIconsBox?.destroy();
-            this._searchInput?.destroy();
-
-            if (this._appStateChangedId) {
-                this._appSystem.disconnect(this._appStateChangedId);
-                this._appStateChangedId = null;
-            }
-
-            super.destroy();
-        }
     });
 
 function arraysEqual(a, b) {
@@ -1053,165 +1015,7 @@ export default class AppPinnerExtension extends Extension {
 
     _dbusImpl = null;
 
-    _getAppInfo(appId) {
-        console.log(`[DEBUG] Getting app info for: ${appId}`);
-
-        const appSys = Shell.AppSystem.get_default();
-        const allApps = appSys.get_installed();
-        const foundApp = allApps.find(app =>
-            app.get_id().toLowerCase() === appId.toLowerCase()
-        );
-
-        if (foundApp) {
-            return Gio.DesktopAppInfo.new(foundApp.get_id());
-        }
-
-        const flatpakPaths = [
-            '/var/lib/flatpak/exports/share/applications/',
-            `${GLib.get_home_dir()}/.local/share/flatpak/exports/share/applications/`
-        ];
-
-        for (const path of flatpakPaths) {
-            const fullPath = `${path}${appId}.desktop`;
-            if (GLib.file_test(fullPath, GLib.FileTest.EXISTS)) {
-                return Gio.DesktopAppInfo.new_from_filename(fullPath);
-            }
-        }
-
-        const dataDirs = GLib.get_system_data_dirs();
-        for (const dataDir of dataDirs) {
-            const appPath = `${dataDir}/applications/${appId}.desktop`;
-            if (GLib.file_test(appPath, GLib.FileTest.EXISTS)) {
-                return Gio.DesktopAppInfo.new_from_filename(appPath);
-            }
-        }
-
-        return null;
-    }
-
-    _sanitizeForFilename(appId) {
-        return appId
-            .replace(/\.desktop$/i, '')
-            .replace(/[^a-zA-Z0-9-]/g, '_')
-            .replace(/_+/g, '_')
-            .substring(0, 50);
-    }
-
-    _syncAutostart() {
-        const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
-        const startupApps = this._settings.get_strv('startup-apps');
-
-        if (!GLib.file_test(autostartDir, GLib.FileTest.IS_DIR)) {
-            GLib.mkdir_with_parents(autostartDir, 0o755);
-        }
-
-        const validFiles = new Map();
-
-        startupApps.forEach(entry => {
-            if (entry.startsWith('link://')) {
-                const url = entry.replace('link://', '');
-                const sanitized = this._sanitizeForFilename(url);
-                const fileName = `app-pinner-link-${sanitized}.desktop`;
-                validFiles.set(fileName, true);
-
-                const content = [
-                    '[Desktop Entry]',
-                    'Type=Application',
-                    `Name=Link ${url}`,
-                    `Exec=xdg-open "${url}"`,
-                    'Icon=emblem-web-symbolic',
-                    'X-GNOME-Autostart-enabled=true',
-                    'X-GNOME-Autostart-Delay=2',
-                    'NoDisplay=false',
-                    ''
-                ].join('\n');
-
-                try {
-                    GLib.file_set_contents(`${autostartDir}/${fileName}`, content);
-                    GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
-                } catch (e) {
-                    console.error(`Errore scrittura link ${url}:`, e.message);
-                }
-            } else {
-                const appInfo = this._getAppInfo(entry);
-                if (!appInfo) {
-                    console.error(`[ERROR] App non trovata: ${entry}`);
-                    return;
-                }
-
-                const desktopId = appInfo.get_id() || `${entry}.desktop`;
-                const sanitizedId = this._sanitizeForFilename(desktopId);
-                const fileName = `app-pinner-${sanitizedId}.desktop`;
-                validFiles.set(fileName, true);
-
-                const execCommand = appInfo.get_string('Exec');
-                if (!execCommand) {
-                    console.error(`[ERROR] Comando non trovato per ${entry}`);
-                    return;
-                }
-
-                const desktopContent = [
-                    '[Desktop Entry]',
-                    'Type=Application',
-                    `Name=${appInfo.get_name()} (App Pinner)`,
-                    `Exec=${execCommand}`,
-                    'X-GNOME-Autostart-enabled=true',
-                    'X-GNOME-Autostart-Delay=2',
-                    'Icon=' + (appInfo.get_icon() || ''),
-                    'Comment=Avviato automaticamente da App Pinner',
-                    'NoDisplay=false',
-                    ''
-                ].join('\n');
-
-                try {
-                    GLib.file_set_contents(`${autostartDir}/${fileName}`, desktopContent);
-                    GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
-                } catch (e) {
-                    console.error(`Errore scrittura app ${entry}:`, e.message);
-                }
-            }
-        });
-
-        const dir = Gio.File.new_for_path(autostartDir);
-        try {
-            const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-            let fileInfo;
-            while ((fileInfo = enumerator.next_file(null))) {
-                const fileName = fileInfo.get_name();
-                if (fileName.startsWith('app-pinner-') && !validFiles.has(fileName)) {
-                    GLib.unlink(`${autostartDir}/${fileName}`);
-                }
-            }
-        } catch (e) {
-            console.error('Errore durante la pulizia dei file:', e.message);
-        }
-    }
-
-    _sanitizeForFilename(appId) {
-        return appId.replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_');
-    }
-
-    _cleanOrphanedStartupApps() {
-        const pinnedApps = this._settings.get_strv('pinned-apps');
-        const customLinks = this._settings.get_strv('custom-links');
-        const startupApps = this._settings.get_strv('startup-apps');
-
-        const validEntries = new Set([
-            ...pinnedApps,
-            ...customLinks.map(url => `link://${url}`)
-        ]);
-
-        const cleaned = startupApps.filter(appId =>
-            validEntries.has(appId) ||
-            customLinks.includes(appId.replace('link://', ''))
-        );
-
-        if (!arraysEqual(cleaned, startupApps)) {
-            this._settings.set_strv('startup-apps', cleaned);
-        }
-    }
-
-
+    // 1. Lifecycle dell'estensione
     enable() {
 
         const dbusInterface = `
@@ -1305,174 +1109,6 @@ export default class AppPinnerExtension extends Extension {
 
     }
 
-    _addKeybinding(position) {
-        const key = `shortcut-${position}`;
-        const shortcut = this._settings.get_string(key);
-
-        if (!shortcut) return;
-
-        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
-
-        const customSettings = new Gio.Settings({
-            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
-            path: customPath
-        });
-
-        customSettings.set_string('name', `App Pinner Position ${position}`);
-        customSettings.set_string('command', `dbus-send --session --type=method_call --dest=org.gnome.Shell /org/gnome/Shell/Extensions/AppPinner org.gnome.Shell.Extensions.AppPinner.LaunchPosition uint32:${position}`);
-        customSettings.set_string('binding', shortcut);
-
-        const mediaKeysSettings = new Gio.Settings({
-            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
-        });
-
-        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
-        if (!currentPaths.includes(customPath)) {
-            mediaKeysSettings.set_strv('custom-keybindings', [...currentPaths, customPath]);
-        }
-    }
-
-    _removeKeybinding(position) {
-        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
-
-        const customSettings = new Gio.Settings({
-            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
-            path: customPath
-        });
-        customSettings.reset('name');
-        customSettings.reset('command');
-        customSettings.reset('binding');
-
-        const mediaKeysSettings = new Gio.Settings({
-            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
-        });
-
-        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
-        const newPaths = currentPaths.filter(p => p !== customPath);
-        mediaKeysSettings.set_strv('custom-keybindings', newPaths);
-    }
-
-    LaunchPosition(position) {
-        this._launchAppByPosition(position);
-    }
-
-    _launchAppByPosition(position) {
-
-        const apps = this._settings.get_strv('pinned-apps');
-
-        if (apps.length === 0) {
-            console.error('[ERROR] Nessuna applicazione pinnata');
-            return;
-        }
-
-        const index = position - 1;
-
-        if (index < 0 || index >= apps.length) {
-            console.error(`[ERROR] Indice non valido: ${index} (max: ${apps.length - 1})`);
-            return;
-        }
-
-        const appId = apps[index];
-
-
-        if (!this._indicator) {
-            console.error('[ERROR] Indicator non inizializzato');
-            return;
-        }
-
-        const appSys = Shell.AppSystem.get_default();
-        let app = appSys.lookup_app(`${appId}.desktop`) || appSys.lookup_app(appId);
-
-        if (!app) {
-            const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
-
-            if (!gioApp) {
-                console.error(`[ERROR] App ${appId} non trovata in nessun formato`);
-                return;
-            }
-        } else {
-        }
-
-        this._indicator._launchApp(appId);
-    }
-
-    _validateSettings() {
-        const currentPos = this._settings.get_string('position-in-panel');
-        if (!['left', 'right'].includes(currentPos)) {
-            this._settings.set_string('position-in-panel', 'right');
-        }
-    }
-
-    _validateAccelerator(accelerator) {
-        try {
-            const [success, keyval] = Gtk.accelerator_parse(accelerator);
-            return success && keyval !== 0;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    _safeRecreateIndicator() {
-        const iconSize = this._settings.get_int('icon-size');
-        const spacing = this._settings.get_int('spacing');
-        const labels = this._settings.get_boolean('enable-labels');
-
-        this._recreateIndicator();
-
-        this._settings.set_int('icon-size', iconSize);
-        this._settings.set_int('spacing', spacing);
-        this._settings.set_boolean('enable-labels', labels);
-    }
-
-    _recreateIndicator() {
-        if (this._indicator) {
-            this._indicator.destroy();
-            this._indicator = null;
-        }
-
-        this._indicator = new AppPinner(this._settings);
-        const position = this._settings.get_string('position-in-panel');
-
-        if (this._indicator.get_parent()) {
-            this._indicator.get_parent().remove_child(this._indicator);
-        }
-
-        switch (position) {
-            case 'left':
-                Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
-                break;
-
-            case 'center':
-                if (Main.panel._centerBox) {
-                    Main.panel._centerBox.add_child(this._indicator);
-                } else {
-                    Main.panel._centerBox = new St.BoxLayout();
-                    Main.panel._centerBox.x_align = Clutter.ActorAlign.CENTER;
-                    Main.panel.insert_child_at_index(Main.panel._centerBox, 1);
-                    Main.panel._centerBox.add_child(this._indicator);
-                }
-                break;
-
-            case 'right':
-                const dateMenu = Main.panel.statusArea?.dateMenu;
-                let targetIndex = 0;
-                if (dateMenu?.actor) {
-                    const children = Main.panel._rightBox.get_children();
-                    const dateMenuIndex = children.indexOf(dateMenu.actor);
-                    targetIndex = dateMenuIndex !== -1 ? dateMenuIndex + 1 : 0;
-                }
-                Main.panel._rightBox.insert_child_at_index(this._indicator, targetIndex);
-                break;
-        }
-
-        this._indicator.set_style_class_name(
-            `app-pinner-position-${position}`
-        );
-
-        Main.panel.queue_relayout();
-        Main.panel.menuManager.addMenu(this._indicator.menu);
-    }
-
     disable() {
 
         if (this._dbusImpl) {
@@ -1544,5 +1180,333 @@ export default class AppPinnerExtension extends Extension {
         } catch (e) {
             console.error('Errore pulizia autostart:', e);
         }
+    }
+
+    // 2. Gestione D-Bus e keybindings
+    _addKeybinding(position) {
+        const key = `shortcut-${position}`;
+        const shortcut = this._settings.get_string(key);
+
+        if (!shortcut) return;
+
+        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
+
+        const customSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
+            path: customPath
+        });
+
+        customSettings.set_string('name', `App Pinner Position ${position}`);
+        customSettings.set_string('command', `dbus-send --session --type=method_call --dest=org.gnome.Shell /org/gnome/Shell/Extensions/AppPinner org.gnome.Shell.Extensions.AppPinner.LaunchPosition uint32:${position}`);
+        customSettings.set_string('binding', shortcut);
+
+        const mediaKeysSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
+        });
+
+        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
+        if (!currentPaths.includes(customPath)) {
+            mediaKeysSettings.set_strv('custom-keybindings', [...currentPaths, customPath]);
+        }
+    }
+
+    LaunchPosition(position) {
+        this._launchAppByPosition(position);
+    }
+
+    _launchAppByPosition(position) {
+
+        const apps = this._settings.get_strv('pinned-apps');
+
+        if (apps.length === 0) return;
+
+        const index = position - 1;
+        if (index < 0 || index >= apps.length) return;
+
+        const appId = apps[index];
+
+        // Gestione speciale per i link
+        if (appId.startsWith('link://')) {
+            if (!this._indicator) return;
+
+            // Forza l'apertura del link direttamente
+            this._indicator._launchApp(appId);
+            return;
+        }
+
+        const appSys = Shell.AppSystem.get_default();
+        let app = appSys.lookup_app(`${appId}.desktop`) || appSys.lookup_app(appId);
+
+        if (!app) {
+            const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
+
+            if (!gioApp) {
+                console.error(`[ERROR] App ${appId} non trovata in nessun formato`);
+                return;
+            }
+        } else {
+        }
+
+        this._indicator._launchApp(appId);
+    }
+
+    // 3. Gestione autostart
+    _syncAutostart() {
+        const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
+        const startupApps = this._settings.get_strv('startup-apps');
+
+        if (!GLib.file_test(autostartDir, GLib.FileTest.IS_DIR)) {
+            GLib.mkdir_with_parents(autostartDir, 0o755);
+        }
+
+        const validFiles = new Map();
+
+        startupApps.forEach(entry => {
+            if (entry.startsWith('link://')) {
+                const url = entry.replace('link://', '');
+                const sanitized = this._sanitizeForFilename(url);
+                const fileName = `app-pinner-link-${sanitized}.desktop`;
+                validFiles.set(fileName, true);
+
+                const content = [
+                    '[Desktop Entry]',
+                    'Type=Application',
+                    `Name=Link ${url}`,
+                    `Exec=xdg-open "${url}"`,
+                    'Icon=emblem-web-symbolic',
+                    'X-GNOME-Autostart-enabled=true',
+                    'X-GNOME-Autostart-Delay=2',
+                    'NoDisplay=false',
+                    ''
+                ].join('\n');
+
+                try {
+                    GLib.file_set_contents(`${autostartDir}/${fileName}`, content);
+                    GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
+                } catch (e) {
+                    console.error(`Errore scrittura link ${url}:`, e.message);
+                }
+            } else {
+                const appInfo = this._getAppInfo(entry);
+                if (!appInfo) {
+                    console.error(`[ERROR] App non trovata: ${entry}`);
+                    return;
+                }
+
+                const desktopId = appInfo.get_id() || `${entry}.desktop`;
+                const sanitizedId = this._sanitizeForFilename(desktopId);
+                const fileName = `app-pinner-${sanitizedId}.desktop`;
+                validFiles.set(fileName, true);
+
+                const execCommand = appInfo.get_string('Exec');
+                if (!execCommand) {
+                    console.error(`[ERROR] Comando non trovato per ${entry}`);
+                    return;
+                }
+
+                const desktopContent = [
+                    '[Desktop Entry]',
+                    'Type=Application',
+                    `Name=${appInfo.get_name()} (App Pinner)`,
+                    `Exec=${execCommand}`,
+                    'X-GNOME-Autostart-enabled=true',
+                    'X-GNOME-Autostart-Delay=2',
+                    'Icon=' + (appInfo.get_icon() || ''),
+                    'Comment=Avviato automaticamente da App Pinner',
+                    'NoDisplay=false',
+                    ''
+                ].join('\n');
+
+                try {
+                    GLib.file_set_contents(`${autostartDir}/${fileName}`, desktopContent);
+                    GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
+                } catch (e) {
+                    console.error(`Errore scrittura app ${entry}:`, e.message);
+                }
+            }
+        });
+
+        const dir = Gio.File.new_for_path(autostartDir);
+        try {
+            const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+            let fileInfo;
+            while ((fileInfo = enumerator.next_file(null))) {
+                const fileName = fileInfo.get_name();
+                if (fileName.startsWith('app-pinner-') && !validFiles.has(fileName)) {
+                    GLib.unlink(`${autostartDir}/${fileName}`);
+                }
+            }
+        } catch (e) {
+            console.error('Errore durante la pulizia dei file:', e.message);
+        }
+    }
+
+    // 4. Funzioni helper e validazione
+    _validateSettings() {
+        const currentPos = this._settings.get_string('position-in-panel');
+        if (!['left', 'right'].includes(currentPos)) {
+            this._settings.set_string('position-in-panel', 'right');
+        }
+    }
+
+    _getAppInfo(appId) {
+        console.log(`[DEBUG] Getting app info for: ${appId}`);
+
+        const appSys = Shell.AppSystem.get_default();
+        const allApps = appSys.get_installed();
+        const foundApp = allApps.find(app =>
+            app.get_id().toLowerCase() === appId.toLowerCase()
+        );
+
+        if (foundApp) {
+            return Gio.DesktopAppInfo.new(foundApp.get_id());
+        }
+
+        const flatpakPaths = [
+            '/var/lib/flatpak/exports/share/applications/',
+            `${GLib.get_home_dir()}/.local/share/flatpak/exports/share/applications/`
+        ];
+
+        for (const path of flatpakPaths) {
+            const fullPath = `${path}${appId}.desktop`;
+            if (GLib.file_test(fullPath, GLib.FileTest.EXISTS)) {
+                return Gio.DesktopAppInfo.new_from_filename(fullPath);
+            }
+        }
+
+        const dataDirs = GLib.get_system_data_dirs();
+        for (const dataDir of dataDirs) {
+            const appPath = `${dataDir}/applications/${appId}.desktop`;
+            if (GLib.file_test(appPath, GLib.FileTest.EXISTS)) {
+                return Gio.DesktopAppInfo.new_from_filename(appPath);
+            }
+        }
+
+        return null;
+    }
+
+    _sanitizeForFilename(appId) {
+        return appId
+            .replace(/\.desktop$/i, '')
+            .replace(/[^a-zA-Z0-9-]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 50);
+    }
+
+    _cleanOrphanedStartupApps() {
+        const pinnedApps = this._settings.get_strv('pinned-apps');
+        const customLinks = this._settings.get_strv('custom-links');
+        const startupApps = this._settings.get_strv('startup-apps');
+
+        const validEntries = new Set([
+            ...pinnedApps,
+            ...customLinks.map(url => `link://${url}`)
+        ]);
+
+        const cleaned = startupApps.filter(appId =>
+            validEntries.has(appId) ||
+            customLinks.includes(appId.replace('link://', ''))
+        );
+
+        if (!arraysEqual(cleaned, startupApps)) {
+            this._settings.set_strv('startup-apps', cleaned);
+        }
+    }
+
+    _removeKeybinding(position) {
+        const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
+
+        const customSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
+            path: customPath
+        });
+        customSettings.reset('name');
+        customSettings.reset('command');
+        customSettings.reset('binding');
+
+        const mediaKeysSettings = new Gio.Settings({
+            schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
+        });
+
+        const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
+        const newPaths = currentPaths.filter(p => p !== customPath);
+        mediaKeysSettings.set_strv('custom-keybindings', newPaths);
+    }
+
+    _showMaxItemsError() {
+        Main.notifyError(
+            _("Maximum items reached"),
+            _("You can pin up to 10 items maximum")
+        );
+    }
+
+    _validateAccelerator(accelerator) {
+        try {
+            const [success, keyval] = Gtk.accelerator_parse(accelerator);
+            return success && keyval !== 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    _safeRecreateIndicator() {
+        const iconSize = this._settings.get_int('icon-size');
+        const spacing = this._settings.get_int('spacing');
+        const labels = this._settings.get_boolean('enable-labels');
+
+        this._recreateIndicator();
+
+        this._settings.set_int('icon-size', iconSize);
+        this._settings.set_int('spacing', spacing);
+        this._settings.set_boolean('enable-labels', labels);
+    }
+
+    _recreateIndicator() {
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+
+        this._indicator = new AppPinner(this._settings);
+        const position = this._settings.get_string('position-in-panel');
+
+        if (this._indicator.get_parent()) {
+            this._indicator.get_parent().remove_child(this._indicator);
+        }
+
+        switch (position) {
+            case 'left':
+                Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
+                break;
+
+            case 'center':
+                if (Main.panel._centerBox) {
+                    Main.panel._centerBox.add_child(this._indicator);
+                } else {
+                    Main.panel._centerBox = new St.BoxLayout();
+                    Main.panel._centerBox.x_align = Clutter.ActorAlign.CENTER;
+                    Main.panel.insert_child_at_index(Main.panel._centerBox, 1);
+                    Main.panel._centerBox.add_child(this._indicator);
+                }
+                break;
+
+            case 'right':
+                const dateMenu = Main.panel.statusArea?.dateMenu;
+                let targetIndex = 0;
+                if (dateMenu?.actor) {
+                    const children = Main.panel._rightBox.get_children();
+                    const dateMenuIndex = children.indexOf(dateMenu.actor);
+                    targetIndex = dateMenuIndex !== -1 ? dateMenuIndex + 1 : 0;
+                }
+                Main.panel._rightBox.insert_child_at_index(this._indicator, targetIndex);
+                break;
+        }
+
+        this._indicator.set_style_class_name(
+            `app-pinner-position-${position}`
+        );
+
+        Main.panel.queue_relayout();
+        Main.panel.menuManager.addMenu(this._indicator.menu);
     }
 }

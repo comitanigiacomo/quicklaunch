@@ -4,24 +4,43 @@
 ![GNOME Version](https://img.shields.io/badge/GNOME-45%2B-success.svg)
 [![GitHub Release](https://img.shields.io/github/v/release/your-username/quicklaunch?include_prereleases&style=flat-square)](https://github.com/your-username/quicklaunch/releases)
 
-**Quick Launch** turns your GNOME top panel into a powerful and intuitive application launcher. Keep your favorite apps just one click away with this lightweight extension designed to enhance your GNOME experience.
+**Quick Launch** transforms your GNOME top panel into a productivity powerhouse, combining application launching, quick access, and system monitoring in one elegant package. Designed for power users who value efficiency and customization.
 
-![Quick Launch in Action](images/image.png)
-
+<p align="center">
+  <img src="Screencast From 2025-04-26 15-01-20.gif" alt="Quick Launch Demo">
+</p>
 
 ## ✨ Key Features
 
 ### ✅ Current Features
-- **Visual application pinning**: *directly from the GNOME app menu*
-- **Integrated GUI**: *for managing shortcuts and pinned apps*
-- **Instant search**: *across installed applications*
-- **Automatic settings reload**: *after any changes made*
-- **Customizable icon size**: *Adjust the size of icons to your preference*
+**Core Functionality**
+- **1-Click Application Launching**: *Instant access to pinned apps/links*
+- **Smart Pinning System**: *Pin directly from GNOME app menu or global search*
+- **Web Links Support**: *Create quick-access shortcuts for URLs/websites*
+- **Multi-Source App Discovery**: *Supports native, Flatpak, and custom .desktop files*
+
+**Visual Customization**
+- **Adaptive Panel Integration**: *Choose left/center/right panel positioning*
+- **Dynamic Running Indicators**: *Color-coded dots showing active applications*
+- **Customizable Layout**:
+  - *Adjustable icon sizes (16-24px)*
+  - *Configurable spacing between icons*
+  - *Toggleable application labels*
+
+**Productivity Enhancements**
+- **Position-Based Keyboard Shortcuts**: *Assign custom shortcuts (Ctrl+Alt+1, etc.)*
+- **Startup Applications Manager**: *Configure apps to launch automatically at login*
+- **Instant Global Search**: *Fuzzy-search across all installed applications*
+- **Long-Press Reordering**: *via long-press gesture*
+- **Session Awareness**: *Automatically refreshes state after sleep/wake cycles*
+
+**Enterprise-Grade Reliability**
+- **Flatpak Support**: *Full compatibility with sandboxed applications*
+- **Config Validation**: *Automatic settings integrity checks*
+- **Orphaned Entry Cleanup**: *Automatic maintenance of pinned/startup items*
 
 ### 🚧 Upcoming Features
 - **Drag & drop support**: *for icon rearrangement*
-- **Advanced customization options**: *(spacing, etc.)*
-- **Support for custom launchers**: *(URLs, terminal commands)*
 - **Alternative icon themes**
 - **Multi-monitor support**
 
@@ -32,27 +51,6 @@
 2. Toggle the switch to install the extension.
 3. Press **Alt+F2**, type `r`, and press Enter to reload GNOME Shell.
 
-### Manual Installation (for advanced users)
-If you prefer to install the extension manually, follow these steps:
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/quicklaunch.git
-   cd quicklaunch
-   ```
-2. Build the extension using **Meson** and **Ninja**:
-    ```bash
-    meson build
-    ninja -C build
-    ```
-3. Install the extension:
-     ```bash
-     ninja -C build install
-    ```
-4. Enable the extension via GNOME Tweaks or the Extensions app.
-
-    >You may need to restart GNOME Shell (`Alt`+`F2`, then type `r`).
-
 ## 💡 Usage
 
 Once installed, you can access the Quick Launch panel from your GNOME top bar. Pin your favorite apps and launch them instantly with a single click. To configure settings, use the integrated GUI accessible from the GNOME Extensions app.
@@ -60,7 +58,6 @@ Once installed, you can access the Quick Launch panel from your GNOME top bar. P
 ## 📄 License
 
 This extension is licensed under the [GPL v3 License](https://www.gnu.org/licenses/gpl-3.0).
-
 
 ## 💬 Contributing
 

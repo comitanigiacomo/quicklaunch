@@ -1,5 +1,4 @@
 import GObject from 'gi://GObject';
-import Gtk from 'gi://Gtk?version=4.0';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
@@ -12,7 +11,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const AppPinner = GObject.registerClass(
     class AppPinner extends PanelMenu.Button {
-        
+
         // 1. Costruttore e inizializzazione
         _init(settings) {
             super._init(0.0, _('App Pinner'));
@@ -104,7 +103,7 @@ const AppPinner = GObject.registerClass(
             });
 
             this._appStateChangedId = this._appSystem.connect('app-state-changed', () => {
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._addTimeout(100, () => {
                     this._updateRunningIndicators();
                     return GLib.SOURCE_REMOVE;
                 });
@@ -113,6 +112,19 @@ const AppPinner = GObject.registerClass(
             this._settingsHandler.push(
                 this._settings.connect('changed::custom-links', () => this._refreshUI())
             );
+
+            this._timeoutIds = new Set();
+
+        }
+
+        _addTimeout(interval, callback) {
+            const sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
+                const result = callback();
+                this._timeoutIds.delete(sourceId);
+                return result;
+            });
+            this._timeoutIds.add(sourceId);
+            return sourceId;
         }
 
         // 2. Metodi lifecycle e gestione stato
@@ -139,6 +151,11 @@ const AppPinner = GObject.registerClass(
             if (this._appStateChangedId) {
                 this._appSystem.disconnect(this._appStateChangedId);
                 this._appStateChangedId = null;
+            }
+
+            if (this._timeoutIds) {
+                this._timeoutIds.forEach(id => GLib.Source.remove(id));
+                this._timeoutIds.clear();
             }
 
             super.destroy();
@@ -484,10 +501,10 @@ const AppPinner = GObject.registerClass(
 
                 this._forceImmediateUpdate(appId);
 
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+                this._addTimeout(1500, () => {
                     this._pendingApps.delete(appId);
                     this._updateRunningIndicators();
-                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    this._addTimeout(500, () => {
                         this._updateRunningIndicators();
                         return GLib.SOURCE_REMOVE;
                     });
@@ -506,7 +523,7 @@ const AppPinner = GObject.registerClass(
             const [isSleeping] = params.deepUnpack();
             if (!isSleeping) {
 
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
+                this._addTimeout(3000, () => {
                     this._forceFullRefresh();
                     return GLib.SOURCE_REMOVE;
                 });
@@ -758,10 +775,6 @@ const AppPinner = GObject.registerClass(
             this.menu.actor.show_all();
             this.menu.actor.queue_redraw();
 
-            Clutter.Threads.add_timeout(0, () => {
-                this.menu.queue_relayout();
-                return GLib.SOURCE_REMOVE;
-            });
         }
 
         _sanitizeAppId(appId) {
@@ -828,7 +841,7 @@ const AppPinner = GObject.registerClass(
                 this._updateRunningIndicator(iconBox.appId, iconBox.runningIndicator);
             });
 
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+            this._addTimeout(1000, () => {
                 this._appSystem = Shell.AppSystem.get_default();
                 this._updateRunningIndicators();
                 return GLib.SOURCE_REMOVE;
@@ -1004,6 +1017,24 @@ export default class AppPinnerExtension extends Extension {
 
     constructor(metadata) {
         super(metadata);
+        this._timeoutIds = new Set();
+    }
+
+    _addTimeout(interval, callback) {
+        const sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
+            const result = callback();
+            this._timeoutIds.delete(sourceId);
+            return result;
+        });
+        this._timeoutIds.add(sourceId);
+        return sourceId;
+    }
+
+    _dbusImpl = null;
+
+    // 1. Lifecycle dell'estensione
+    enable() {
+
         this._sessionConnection = Gio.DBus.session;
         this._sessionWatcher = this._sessionConnection.watch_name(
             'org.gnome.Shell',
@@ -1011,12 +1042,6 @@ export default class AppPinnerExtension extends Extension {
             () => { },
             () => this.disable()
         );
-    }
-
-    _dbusImpl = null;
-
-    // 1. Lifecycle dell'estensione
-    enable() {
 
         const dbusInterface = `
         <node>
@@ -1102,7 +1127,7 @@ export default class AppPinnerExtension extends Extension {
             this._syncAutostart();
         });
 
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, () => {
+        this._addTimeout(2000, () => {
             this._syncAutostart();
             return GLib.SOURCE_REMOVE;
         });
@@ -1110,6 +1135,11 @@ export default class AppPinnerExtension extends Extension {
     }
 
     disable() {
+
+        if (this._sessionWatcherId) {
+            this._sessionConnection.unwatch_name(this._sessionWatcherId);
+            this._sessionWatcherId = null;
+        }
 
         if (this._dbusImpl) {
             try {
@@ -1150,6 +1180,11 @@ export default class AppPinnerExtension extends Extension {
             this._indicator = null;
         }
 
+        if (this._timeoutIds) {
+            this._timeoutIds.forEach(id => GLib.Source.remove(id));
+            this._timeoutIds.clear();
+        }
+
         this._settings.disconnect(this._shortcutHandler);
 
         const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
@@ -1180,6 +1215,7 @@ export default class AppPinnerExtension extends Extension {
         } catch (e) {
             console.error('Errore pulizia autostart:', e);
         }
+        this._settings = null
     }
 
     // 2. Gestione D-Bus e keybindings
@@ -1441,9 +1477,11 @@ export default class AppPinnerExtension extends Extension {
     }
 
     _validateAccelerator(accelerator) {
+        if (!accelerator) return false;
+
         try {
-            const [success, keyval] = Gtk.accelerator_parse(accelerator);
-            return success && keyval !== 0;
+            const [key, mods] = Clutter.accelerator_parse(accelerator);
+            return key !== 0;
         } catch (e) {
             return false;
         }

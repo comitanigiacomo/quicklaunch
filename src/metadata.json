@@ -5,7 +5,7 @@
   "settings-schema": "org.gnome.shell.extensions.app-pinner",
   "url": "https://github.com/comitanigiacomo/quicklaunch",
   "stylesheet": "stylesheet.css",
-  "version": 1.0,
+  "version": 3,
   "creator":"comitanigiacomo",
   "shell-version": ["45","46","47"]
 }

@@ -1,8 +1,8 @@
-# Quick Launch GNOME Extension 🚀
+# Quick Launch GNOME Extension
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![GNOME Version](https://img.shields.io/badge/GNOME-45%2B-success.svg)
-[![GitHub Release](https://img.shields.io/github/v/release/your-username/quicklaunch?include_prereleases&style=flat-square)](https://github.com/your-username/quicklaunch/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/comitanigiacomo/quicklaunch?include_prereleases&style=flat-square)](https://github.com/comitanigiacomo/quicklaunch/releases)
 
 **Quick Launch** transforms your GNOME top panel into a productivity powerhouse, combining application launching, quick access, and system monitoring in one elegant package. Designed for power users who value efficiency and customization.
 

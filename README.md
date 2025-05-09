@@ -10,7 +10,7 @@
   <img src="Screencast From 2025-04-26 15-01-20.gif" alt="Quick Launch Demo">
 </p>
 
-## ✨ Key Features
+## Key Features
 
 ### ✅ Current Features
 **Core Functionality**

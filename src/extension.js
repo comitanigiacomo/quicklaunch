@@ -1072,29 +1072,16 @@ export default class AppPinnerExtension extends Extension {
 
         this._keybindings = [];
         for (let i = 1; i <= 10; i++) {
-            this._addKeybinding(i);
+            const shortcut = this._settings.get_string(`shortcut-${i}`);
+            if (shortcut) {
+                this._addKeybinding(i);
+            }
         }
 
-        this._shortcutHandler = this._settings.connect('changed', () => {
-            this._keybindings.forEach(k => Main.wm.removeKeybinding(k));
-            this._keybindings = [];
-
-            for (let i = 1; i <= 10; i++) {
-                const shortcut = this._settings.get_string(`shortcut-${i}`);
-                if (shortcut) {
-                    this._addKeybinding(i);
-                } else {
-                    this._removeKeybinding(i);
-                }
-            }
-        });
-
+        this._shortcutHandlers = [];
         for (let i = 1; i <= 10; i++) {
-            const shortcut = this._settings.get_string(`shortcut-${i}`);
-            if (shortcut && !this._validateAccelerator(shortcut)) {
-                console.warn(`Scorciatoia ${i} non valida: ${shortcut}`);
-                this._settings.set_string(`shortcut-${i}`, '');
-            }
+            const handlerId = this._settings.connect(`changed::shortcut-${i}`, () => this._updateKeybinding(i));
+            this._shortcutHandlers.push(handlerId);
         }
 
         this._safeRecreateIndicator();
@@ -1218,6 +1205,15 @@ export default class AppPinnerExtension extends Extension {
         this._settings = null
     }
 
+    _updateKeybinding(position) {
+        const shortcut = this._settings.get_string(`shortcut-${position}`);
+        if (shortcut) {
+            this._addKeybinding(position);
+        } else {
+            this._removeKeybinding(position);
+        }
+    }
+
     // 2. Gestione D-Bus e keybindings
     _addKeybinding(position) {
         const key = `shortcut-${position}`;
@@ -1261,11 +1257,9 @@ export default class AppPinnerExtension extends Extension {
 
         const appId = apps[index];
 
-        // Gestione speciale per i link
         if (appId.startsWith('link://')) {
             if (!this._indicator) return;
 
-            // Forza l'apertura del link direttamente
             this._indicator._launchApp(appId);
             return;
         }
@@ -1452,21 +1446,23 @@ export default class AppPinnerExtension extends Extension {
     _removeKeybinding(position) {
         const customPath = `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/app-pinner-${position}/`;
 
-        const customSettings = new Gio.Settings({
-            schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
-            path: customPath
-        });
-        customSettings.reset('name');
-        customSettings.reset('command');
-        customSettings.reset('binding');
-
         const mediaKeysSettings = new Gio.Settings({
             schema_id: 'org.gnome.settings-daemon.plugins.media-keys'
         });
 
         const currentPaths = mediaKeysSettings.get_strv('custom-keybindings');
-        const newPaths = currentPaths.filter(p => p !== customPath);
-        mediaKeysSettings.set_strv('custom-keybindings', newPaths);
+        if (currentPaths.includes(customPath)) {
+            const newPaths = currentPaths.filter(p => p !== customPath);
+            mediaKeysSettings.set_strv('custom-keybindings', newPaths);
+
+            const customSettings = new Gio.Settings({
+                schema_id: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding',
+                path: customPath
+            });
+            customSettings.reset('name');
+            customSettings.reset('command');
+            customSettings.reset('binding');
+        }
     }
 
     _showMaxItemsError() {

@@ -115,6 +115,21 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         colorRow.set_activatable_widget(colorButton);
         group.add(colorRow);
 
+        const visibilityGroup = new Adw.PreferencesGroup({
+            title: 'Visibility Options',
+            description: 'Control where pinned apps are displayed'
+        });
+
+        const panelToggle = new Adw.SwitchRow({
+            title: 'Show in Top Panel',
+            subtitle: 'Display pinned apps directly in the panel',
+            active: settings.get_boolean('show-in-panel')
+        });
+        settings.bind('show-in-panel', panelToggle, 'active', Gio.SettingsBindFlags.DEFAULT);
+        visibilityGroup.add(panelToggle);
+
+        page.add(visibilityGroup);
+
         page.add(group);
     }
 

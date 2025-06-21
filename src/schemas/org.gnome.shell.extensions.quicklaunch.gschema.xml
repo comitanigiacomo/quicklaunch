@@ -20,6 +20,18 @@
       <summary>Icon size in pixels</summary>
     </key>
 
+    <key name="show-in-panel" type="b">
+      <default>true</default>
+      <summary>Show apps in panel</summary>
+      <description>Whether to display pinned apps in the top panel</description>
+    </key>
+
+    <key name="always-show-menu" type="b">
+      <default>false</default>
+      <summary>Always show menu icon</summary>
+      <description>Keep the menu icon visible even when panel apps are hidden</description>
+    </key>
+
     <key name="position-in-panel" type="s">
       <default>'right'</default>
       <choices>

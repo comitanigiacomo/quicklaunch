@@ -18,9 +18,14 @@ const AppPinner = GObject.registerClass(
             this._settings = settings;
             this._destroyed = false;
             this._pendingApps = new Set();
+            this._settingsHandler = [];
 
             this._windowTracker = Shell.WindowTracker.get_default();
             this._windowTracker.connect('tracked-windows-changed', this._updateRunningIndicators.bind(this));
+
+            this._settingsHandler.push(
+                this._settings.connect('changed::show-in-panel', () => this._updateVisibility())
+            );
 
             this._appSystem = Shell.AppSystem.get_default();
             this._runningTracker = new Set();
@@ -60,7 +65,7 @@ const AppPinner = GObject.registerClass(
             this._updateIconsSpacing();
 
             // Connessioni impostazioni
-            this._settingsHandler = [
+            this._settingsHandler.push(
                 this._settings.connect('changed::icon-size', () => this._refreshUI()),
                 this._settings.connect('changed::spacing', () => {
                     this._updateIconsSpacing();
@@ -72,7 +77,8 @@ const AppPinner = GObject.registerClass(
                     this._updateIndicatorColor();
                     this._updateRunningIndicators();
                 })
-            ];
+            );
+
 
             this.menu.actor.connect('button-press-event', (actor, event) => {
                 const target = event.get_source();
@@ -115,6 +121,12 @@ const AppPinner = GObject.registerClass(
 
             this._timeoutIds = new Set();
 
+        }
+
+        _updateVisibility() {
+            const showInPanel = this._settings.get_boolean('show-in-panel');
+            this._pinnedIconsBox.visible = showInPanel;
+            this._menuIcon.visible = true;
         }
 
         _addTimeout(interval, callback) {
@@ -1018,6 +1030,7 @@ export default class AppPinnerExtension extends Extension {
     constructor(metadata) {
         super(metadata);
         this._timeoutIds = new Set();
+        this._settingsHandler = [];
     }
 
     _addTimeout(interval, callback) {
@@ -1034,6 +1047,20 @@ export default class AppPinnerExtension extends Extension {
 
     // 1. Lifecycle dell'estensione
     enable() {
+
+        this._settingsHandler = [];
+
+        this._settings = this.getSettings();
+
+        this._validateSettings();
+
+        this._settingsHandler.push(
+            this._settings.connect('changed::show-in-panel', () => {
+                if (this._indicator) {
+                    this._indicator._updateVisibility();
+                }
+            })
+        );
 
         this._sessionConnection = Gio.DBus.session;
         this._sessionWatcher = this._sessionConnection.watch_name(
@@ -1061,9 +1088,9 @@ export default class AppPinnerExtension extends Extension {
             }
         }
 
-        this._settings = this.getSettings();
-
-        this._validateSettings();
+        if (!this._settings.settings_schema.get_key('show-in-panel')) {
+            this._settings.set_boolean('show-in-panel', true);
+        }
 
         this._positionHandler = this._settings.connect(
             'changed::position-in-panel',
@@ -1202,6 +1229,16 @@ export default class AppPinnerExtension extends Extension {
         } catch (e) {
             console.error('Errore pulizia autostart:', e);
         }
+
+        if (this._settingsHandler) {
+            this._settingsHandler.forEach(handler => {
+                if (handler) {
+                    this._settings.disconnect(handler);
+                }
+            });
+            this._settingsHandler = null;
+        }
+
         this._settings = null
     }
 

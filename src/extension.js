@@ -127,6 +127,8 @@ const AppPinner = GObject.registerClass(
             const showInPanel = this._settings.get_boolean('show-in-panel');
             this._pinnedIconsBox.visible = showInPanel;
             this._menuIcon.visible = true;
+            this._pinnedIconsBox.queue_relayout();
+            this.queue_relayout();
         }
 
         _addTimeout(interval, callback) {
@@ -484,6 +486,15 @@ const AppPinner = GObject.registerClass(
             return iconBox;
         }
 
+        _checkVisibility() {
+            if (this._destroyed) return;
+            this._updateVisibility();
+            this._addTimeout(2000, () => {
+                this._checkVisibility();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
         // 4. Gestione interazioni utente
         _launchApp(appId) {
 
@@ -534,8 +545,8 @@ const AppPinner = GObject.registerClass(
         _handleSleepSignal(sender, signalName, params) {
             const [isSleeping] = params.deepUnpack();
             if (!isSleeping) {
-
-                this._addTimeout(3000, () => {
+                this._addTimeout(1000, () => {
+                    this._updateVisibility();
                     this._forceFullRefresh();
                     return GLib.SOURCE_REMOVE;
                 });
@@ -1146,6 +1157,8 @@ export default class AppPinnerExtension extends Extension {
             return GLib.SOURCE_REMOVE;
         });
 
+        this._indicator._checkVisibility();
+
     }
 
     disable() {
@@ -1239,6 +1252,10 @@ export default class AppPinnerExtension extends Extension {
             this._settingsHandler = null;
         }
 
+        if (this._indicator && this._indicator._checkVisibility) {
+            GLib.Source.remove(this._indicator._checkVisibilityTimeout);
+        }
+        
         this._settings = null
     }
 

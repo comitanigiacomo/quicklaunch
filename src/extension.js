@@ -148,11 +148,6 @@ const AppPinner = GObject.registerClass(
 
             if (this._logindId && this._logindProxy) {
                 this._logindProxy.disconnect(this._logindId);
-                this._logindProxy.run_dispose();
-            }
-
-            if (this._logindProxy) {
-                this._logindProxy.run_dispose();
                 this._logindProxy = null;
             }
 
@@ -335,10 +330,11 @@ const AppPinner = GObject.registerClass(
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
-                longPressTimeout = setTimeout(() => {
+                longPressTimeout = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
-                }, 500);
+                    return GLib.SOURCE_REMOVE;
+                });
 
                 actor.ease({
                     scale_x: 0.8,
@@ -431,10 +427,11 @@ const AppPinner = GObject.registerClass(
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
-                longPressTimeout = setTimeout(() => {
+                longPressTimeout = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
-                }, 500);
+                    return GLib.SOURCE_REMOVE;
+                });
 
                 actor.ease({
                     scale_x: 0.8,
@@ -716,10 +713,11 @@ const AppPinner = GObject.registerClass(
         }
 
         _handleWakeupEvent() {
-            setTimeout(() => {
+            this._addTimeout(2000, () => {
                 this._updateRunningIndicators();
                 this._refreshUI();
-            }, 2000);
+                return GLib.SOURCE_REMOVE;
+            });
         }
 
         _pinLink(url) {
@@ -899,7 +897,7 @@ const AppPinner = GObject.registerClass(
                 });
             });
 
-            Clutter.Threads.add_timeout(300, () => {
+            this._addTimeout(300, () => {
                 this._settings.get_strv('pinned-apps').forEach(appId =>
                     this._addPinnedIcon(appId)
                 );
@@ -1130,10 +1128,11 @@ export default class AppPinnerExtension extends Extension {
         this._startupChangedId = this._settings.connect(
             'changed::startup-apps',
             () => {
-                setTimeout(() => {
+                this._addTimeout(500, () => {
                     console.log("[DEBUG] Startup apps changed!");
                     this._syncAutostart();
-                }, 500);
+                    return GLib.SOURCE_REMOVE;
+                });
             }
         );
 
@@ -1255,7 +1254,7 @@ export default class AppPinnerExtension extends Extension {
         if (this._indicator && this._indicator._checkVisibility) {
             GLib.Source.remove(this._indicator._checkVisibilityTimeout);
         }
-        
+
         this._settings = null
     }
 

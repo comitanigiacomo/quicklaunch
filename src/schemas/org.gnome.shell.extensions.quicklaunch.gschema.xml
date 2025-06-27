@@ -127,6 +127,10 @@
       <default>[]</default>
       <summary>Custom pinned links</summary>
     </key>
-
+    <key name="sort-alphabetically" type="b">
+      <default>false</default>
+      <summary>Sort apps alphabetically</summary>
+      <description>If enabled, pinned apps will be sorted by name.</description>
+    </key>
   </schema>
 </schemalist>

@@ -115,6 +115,14 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         colorRow.set_activatable_widget(colorButton);
         group.add(colorRow);
 
+        const sortToggle = new Adw.SwitchRow({
+            title: 'Sort Alphabetically',
+            subtitle: 'Automatically sort apps by name',
+            active: settings.get_boolean('sort-alphabetically')
+        });
+        settings.bind('sort-alphabetically', sortToggle, 'active', Gio.SettingsBindFlags.DEFAULT);
+        group.add(sortToggle);
+
         const visibilityGroup = new Adw.PreferencesGroup({
             title: 'Visibility Options',
             description: 'Control where pinned apps are displayed'

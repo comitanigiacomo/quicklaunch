@@ -24,7 +24,8 @@ const AppPinner = GObject.registerClass(
             this._windowTracker.connect('tracked-windows-changed', this._updateRunningIndicators.bind(this));
 
             this._settingsHandler.push(
-                this._settings.connect('changed::show-in-panel', () => this._updateVisibility())
+                this._settings.connect('changed::show-in-panel', () => this._updateVisibility()),
+                this._settings.connect('changed::sort-alphabetically', () => this._refreshUI())
             );
 
             this._appSystem = Shell.AppSystem.get_default();
@@ -326,11 +327,15 @@ const AppPinner = GObject.registerClass(
 
             iconBox.runningIndicator = runningIndicator;
 
-            let longPressTimeout = null;
+            let pressStartTime = 0;
+            let longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
-                longPressTimeout = this._addTimeout(500, () => {
+                pressStartTime = Date.now();
+                isLongPress = false;
+
+                longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
                     return GLib.SOURCE_REMOVE;
@@ -341,14 +346,14 @@ const AppPinner = GObject.registerClass(
                     scale_y: 0.8,
                     duration: 200
                 });
-
                 return Clutter.EVENT_PROPAGATE;
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (longPressTimeout) {
-                    clearTimeout(longPressTimeout);
-                    longPressTimeout = null;
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
                 }
 
                 actor.ease({
@@ -356,7 +361,6 @@ const AppPinner = GObject.registerClass(
                     scale_y: 1.0,
                     duration: 200
                 });
-
                 return Clutter.EVENT_PROPAGATE;
             });
 
@@ -365,17 +369,6 @@ const AppPinner = GObject.registerClass(
                     this._launchApp(appId);
                 }
                 isLongPress = false;
-            });
-
-            iconBox.opacity = 0;
-            iconBox.scale_x = 0.5;
-            iconBox.scale_y = 0.5;
-            iconBox.ease({
-                opacity: 255,
-                scale_x: 1,
-                scale_y: 1,
-                duration: 300,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD
             });
 
             iconBox.add_child(iconContainer);
@@ -423,11 +416,16 @@ const AppPinner = GObject.registerClass(
                     : '';
             });
 
-            let longPressTimeout = null;
+            let pressStartTime = 0;
+            let longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
-                longPressTimeout = this._addTimeout(500, () => {
+
+                pressStartTime = Date.now();
+                isLongPress = false;
+
+                longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
                     return GLib.SOURCE_REMOVE;
@@ -443,9 +441,10 @@ const AppPinner = GObject.registerClass(
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (longPressTimeout) {
-                    clearTimeout(longPressTimeout);
-                    longPressTimeout = null;
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
                 }
 
                 actor.ease({
@@ -617,7 +616,23 @@ const AppPinner = GObject.registerClass(
             const range = key.get_range();
             const [minSize, maxIconSize] = range.deep_unpack();
 
-            const pinnedApps = this._settings.get_strv('pinned-apps');
+            let pinnedApps = this._settings.get_strv('pinned-apps');
+
+            if (this._settings.get_boolean('sort-alphabetically') && pinnedApps.length > 0) {
+                const sortedApps = [...pinnedApps].sort((a, b) => {
+                    const nameA = this._getAppOrLinkName(a).toLowerCase();
+                    const nameB = this._getAppOrLinkName(b).toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+
+                if (!arraysEqual(pinnedApps, sortedApps)) {
+                    const handler = this._settings.connect('changed::pinned-apps', () => { });
+                    this._settings.set_strv('pinned-apps', sortedApps);
+                    this._settings.disconnect(handler);
+                    return;
+                }
+            }
+
             const spacing = this._settings.get_int('spacing');
             const totalItems = pinnedApps.length;
 
@@ -953,6 +968,42 @@ const AppPinner = GObject.registerClass(
         _updateIndicatorColor(indicator) {
             const color = this._settings.get_string('indicator-color');
             indicator.set_style(`background-color: ${color};`);
+        }
+
+        _getUrlName(url) {
+            try {
+                if (!url.match(/^[a-zA-Z]+:\/\//)) {
+                    url = 'http://' + url;
+                }
+
+                const parsed = new URL(url);
+                let hostname = parsed.hostname;
+
+                hostname = hostname.replace(/^www\./i, '');
+
+                const specialCases = {
+                    'youtube.com': 'YouTube',
+                    'google.com': 'Google',
+                    'github.com': 'GitHub',
+                };
+
+                return specialCases[hostname.toLowerCase()] ||
+                    hostname.split('.')[0].charAt(0).toUpperCase() +
+                    hostname.split('.')[0].slice(1);
+            } catch (e) {
+                return url.replace(/^https?:\/\//, '')
+                    .replace(/^www\./i, '')
+                    .split('/')[0];
+            }
+        }
+
+        _getAppOrLinkName(appId) {
+            if (appId.startsWith('link://')) {
+                return this._getUrlName(appId.replace('link://', ''));
+            } else {
+                const app = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
+                return app ? app.get_name() : appId;
+            }
         }
 
 

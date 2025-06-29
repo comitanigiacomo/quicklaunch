@@ -19,6 +19,7 @@ const AppPinner = GObject.registerClass(
             this._destroyed = false;
             this._pendingApps = new Set();
             this._settingsHandler = [];
+            this._longPressTimeoutId = null;
 
             this._windowTracker = Shell.WindowTracker.get_default();
             this._windowTracker.connect('tracked-windows-changed', this._updateRunningIndicators.bind(this));
@@ -166,6 +167,12 @@ const AppPinner = GObject.registerClass(
             if (this._timeoutIds) {
                 this._timeoutIds.forEach(id => GLib.Source.remove(id));
                 this._timeoutIds.clear();
+            }
+
+            if (this._longPressTimeoutId !== null) {
+                GLib.Source.remove(this._longPressTimeoutId);
+                this._timeoutIds.delete(this._longPressTimeoutId);
+                this._longPressTimeoutId = null;
             }
 
             super.destroy();
@@ -336,15 +343,16 @@ const AppPinner = GObject.registerClass(
                 if (longPressTimeoutId !== null) {
                     GLib.Source.remove(longPressTimeoutId);
                     this._timeoutIds.delete(longPressTimeoutId);
-                    longPressTimeoutId = null;
+                    this._longPressTimeoutId = null;
                 }
-                
+
                 pressStartTime = Date.now();
                 isLongPress = false;
 
                 longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
+                    this._longPressTimeoutId = null; 
                     return GLib.SOURCE_REMOVE;
                 });
 

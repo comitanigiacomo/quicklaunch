@@ -335,21 +335,21 @@ const AppPinner = GObject.registerClass(
             iconBox.runningIndicator = runningIndicator;
 
             let pressStartTime = 0;
-            let longPressTimeoutId = null;
+            this._longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
 
-                if (longPressTimeoutId !== null) {
-                    GLib.Source.remove(longPressTimeoutId);
-                    this._timeoutIds.delete(longPressTimeoutId);
+                if (this._longPressTimeoutId !== null) {
+                    GLib.Source.remove(this._longPressTimeoutId);
+                    this._timeoutIds.delete(this._longPressTimeoutId);
                     this._longPressTimeoutId = null;
                 }
 
                 pressStartTime = Date.now();
                 isLongPress = false;
 
-                longPressTimeoutId = this._addTimeout(500, () => {
+                this._longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
                     this._longPressTimeoutId = null; 
@@ -365,10 +365,10 @@ const AppPinner = GObject.registerClass(
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (longPressTimeoutId !== null) {
-                    GLib.Source.remove(longPressTimeoutId);
-                    this._timeoutIds.delete(longPressTimeoutId);
-                    longPressTimeoutId = null;
+                if (this._longPressTimeoutId !== null) {
+                    GLib.Source.remove(this._longPressTimeoutId);
+                    this._timeoutIds.delete(this._longPressTimeoutId);
+                    this._longPressTimeoutId = null;
                 }
 
                 actor.ease({
@@ -432,7 +432,7 @@ const AppPinner = GObject.registerClass(
             });
 
             let pressStartTime = 0;
-            let longPressTimeoutId = null;
+            this._longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
@@ -440,7 +440,7 @@ const AppPinner = GObject.registerClass(
                 pressStartTime = Date.now();
                 isLongPress = false;
 
-                longPressTimeoutId = this._addTimeout(500, () => {
+                this._longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
                     return GLib.SOURCE_REMOVE;
@@ -456,10 +456,10 @@ const AppPinner = GObject.registerClass(
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (longPressTimeoutId !== null) {
-                    GLib.Source.remove(longPressTimeoutId);
-                    this._timeoutIds.delete(longPressTimeoutId);
-                    longPressTimeoutId = null;
+                if (this._longPressTimeoutId !== null) {
+                    GLib.Source.remove(this._longPressTimeoutId);
+                    this._timeoutIds.delete(this._longPressTimeoutId);
+                    this._longPressTimeoutId = null;
                 }
 
                 actor.ease({

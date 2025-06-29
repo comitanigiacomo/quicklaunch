@@ -332,6 +332,13 @@ const AppPinner = GObject.registerClass(
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
+
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
+                }
+                
                 pressStartTime = Date.now();
                 isLongPress = false;
 

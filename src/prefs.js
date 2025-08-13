@@ -125,7 +125,7 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
 
         const visibilityGroup = new Adw.PreferencesGroup({
             title: 'Visibility Options',
-            description: 'Control where pinned apps are displayed'
+            description: 'Control what elements are displayed in the panel'
         });
 
         const panelToggle = new Adw.SwitchRow({
@@ -135,6 +135,14 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         });
         settings.bind('show-in-panel', panelToggle, 'active', Gio.SettingsBindFlags.DEFAULT);
         visibilityGroup.add(panelToggle);
+
+        const pinIconToggle = new Adw.SwitchRow({
+            title: 'Show Pin Icon',
+            subtitle: 'Display the pin icon when apps are pinned',
+            active: settings.get_boolean('show-pin-icon')
+        });
+        settings.bind('show-pin-icon', pinIconToggle, 'active', Gio.SettingsBindFlags.DEFAULT);
+        visibilityGroup.add(pinIconToggle);
 
         page.add(visibilityGroup);
 

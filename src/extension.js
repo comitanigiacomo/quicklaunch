@@ -26,7 +26,8 @@ const AppPinner = GObject.registerClass(
 
             this._settingsHandler.push(
                 this._settings.connect('changed::show-in-panel', () => this._updateVisibility()),
-                this._settings.connect('changed::sort-alphabetically', () => this._refreshUI())
+                this._settings.connect('changed::sort-alphabetically', () => this._refreshUI()),
+                this._settings.connect('changed::show-pin-icon', () => this._updatePinIconVisibility())
             );
 
             this._appSystem = Shell.AppSystem.get_default();
@@ -128,8 +129,23 @@ const AppPinner = GObject.registerClass(
         _updateVisibility() {
             const showInPanel = this._settings.get_boolean('show-in-panel');
             this._pinnedIconsBox.visible = showInPanel;
-            this._menuIcon.visible = true;
+            this._updatePinIconVisibility();
             this._pinnedIconsBox.queue_relayout();
+            this.queue_relayout();
+        }
+
+        _updatePinIconVisibility() {
+            const showPinIcon = this._settings.get_boolean('show-pin-icon');
+            const hasPinnedApps = this._settings.get_strv('pinned-apps').length > 0;
+            const noPinnedApps = !hasPinnedApps;
+
+            const iconSize = noPinnedApps ? 18 : 18;
+            this._menuIcon.icon_size = iconSize;
+
+            this._menuIcon.opacity = (noPinnedApps || showPinIcon) ? 255 : 0;
+            this._menuIcon.reactive = (noPinnedApps || showPinIcon);
+            this._menuIcon.set_width(showPinIcon ? -1 : iconSize);
+
             this.queue_relayout();
         }
 
@@ -249,6 +265,22 @@ const AppPinner = GObject.registerClass(
             linkBox.add_child(this._linkInput);
             linkBox.add_child(addLinkBtn);
             linkSection.actor.add_child(linkBox);
+
+            this._mainContainer.reactive = true;
+            this._mainContainer.connect('button-press-event', (actor, event) => {
+                if (event.get_button() === Clutter.BUTTON_PRIMARY) {
+                    this.menu.toggle();
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+
+            this.menu.actor.connect('button-press-event', (actor, event) => {
+                const target = event.get_source();
+                if (!this.menu.actor.contains(target)) {
+                    this.menu.close();
+                }
+            });
         }
 
         _addPinnedIcon(appId) {
@@ -352,7 +384,7 @@ const AppPinner = GObject.registerClass(
                 this._longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
-                    this._longPressTimeoutId = null; 
+                    this._longPressTimeoutId = null;
                     return GLib.SOURCE_REMOVE;
                 });
 
@@ -671,6 +703,8 @@ const AppPinner = GObject.registerClass(
 
             this._pinnedSection.box.destroy_all_children();
             pinnedApps.forEach(appId => this._addMenuPinnedItem(appId));
+
+            this._updatePinIconVisibility();
         }
 
         _updateIconsSpacing() {
@@ -1133,6 +1167,11 @@ export default class AppPinnerExtension extends Extension {
             this._settings.connect('changed::show-in-panel', () => {
                 if (this._indicator) {
                     this._indicator._updateVisibility();
+                }
+            }),
+            this._settings.connect('changed::show-pin-icon', () => {
+                if (this._indicator) {
+                    this._indicator._updatePinIconVisibility();
                 }
             })
         );

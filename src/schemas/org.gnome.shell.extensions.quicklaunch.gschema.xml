@@ -6,6 +6,12 @@
       <default>[]</default>
       <summary>Custom keybindings paths</summary>
     </key>
+
+    <key name="show-pin-icon" type="b">
+      <default>true</default>
+      <summary>Show pin icon in panel</summary>
+      <description>Whether to show the pin icon in the panel when there are pinned items</description>
+    </key>
     
     <!-- Applicazioni Pinnate -->
     <key name="pinned-apps" type="as">

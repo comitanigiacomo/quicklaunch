@@ -111,13 +111,6 @@ const AppPinner = GObject.registerClass(
                 }
             });
 
-            this._appStateChangedId = this._appSystem.connect('app-state-changed', () => {
-                this._addTimeout(100, () => {
-                    this._updateRunningIndicators();
-                    return GLib.SOURCE_REMOVE;
-                });
-            });
-
             this._settingsHandler.push(
                 this._settings.connect('changed::custom-links', () => this._refreshUI())
             );
@@ -159,13 +152,29 @@ const AppPinner = GObject.registerClass(
             return sourceId;
         }
 
+        // Intercettiamo il button press a livello di vfunc per evitare che
+        // PanelMenu.Button apra il menu quando si clicca su un'icona pinnata
+        vfunc_event(event) {
+            if (event.type() === Clutter.EventType.BUTTON_PRESS ||
+                event.type() === Clutter.EventType.TOUCH_BEGIN) {
+                const target = event.get_source();
+                if (this._pinnedIconsBox && this._pinnedIconsBox.contains(target)) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                if (this.menu)
+                    this.menu.toggle();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        }
+
         // 2. Metodi lifecycle e gestione stato
         destroy() {
             if (this._destroyed) return;
             this._destroyed = true;
 
             if (this._logindId && this._logindProxy) {
-                this._logindProxy.disconnect(this._logindId);
+                this._logindProxy.disconnectSignal(this._logindId);
                 this._logindProxy = null;
             }
 
@@ -269,6 +278,11 @@ const AppPinner = GObject.registerClass(
             this._mainContainer.reactive = true;
             this._mainContainer.connect('button-press-event', (actor, event) => {
                 if (event.get_button() === Clutter.BUTTON_PRIMARY) {
+                    const target = event.get_source();
+                    // Se il click è su un'icona pinnata, lasciamo che gestisca l'evento l'icona stessa
+                    if (this._pinnedIconsBox.contains(target)) {
+                        return Clutter.EVENT_PROPAGATE;
+                    }
                     this.menu.toggle();
                     return Clutter.EVENT_STOP;
                 }
@@ -291,7 +305,7 @@ const AppPinner = GObject.registerClass(
             }
 
 
-            const app = Gio.DesktopAppInfo.new(appId + '.desktop') ||
+            let app = Gio.DesktopAppInfo.new(`${appId}.desktop`) ||
                 Gio.DesktopAppInfo.new(appId);
 
             if (!app) {
@@ -367,24 +381,24 @@ const AppPinner = GObject.registerClass(
             iconBox.runningIndicator = runningIndicator;
 
             let pressStartTime = 0;
-            this._longPressTimeoutId = null;
+            let longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
 
-                if (this._longPressTimeoutId !== null) {
-                    GLib.Source.remove(this._longPressTimeoutId);
-                    this._timeoutIds.delete(this._longPressTimeoutId);
-                    this._longPressTimeoutId = null;
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
                 }
 
                 pressStartTime = Date.now();
                 isLongPress = false;
 
-                this._longPressTimeoutId = this._addTimeout(500, () => {
+                longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
-                    this._longPressTimeoutId = null;
+                    longPressTimeoutId = null;
                     return GLib.SOURCE_REMOVE;
                 });
 
@@ -393,14 +407,14 @@ const AppPinner = GObject.registerClass(
                     scale_y: 0.8,
                     duration: 200
                 });
-                return Clutter.EVENT_PROPAGATE;
+                return Clutter.EVENT_STOP;
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (this._longPressTimeoutId !== null) {
-                    GLib.Source.remove(this._longPressTimeoutId);
-                    this._timeoutIds.delete(this._longPressTimeoutId);
-                    this._longPressTimeoutId = null;
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
                 }
 
                 actor.ease({
@@ -408,14 +422,12 @@ const AppPinner = GObject.registerClass(
                     scale_y: 1.0,
                     duration: 200
                 });
-                return Clutter.EVENT_PROPAGATE;
-            });
 
-            iconButton.connect('clicked', () => {
                 if (!isLongPress) {
                     this._launchApp(appId);
                 }
                 isLongPress = false;
+                return Clutter.EVENT_STOP;
             });
 
             iconBox.add_child(iconContainer);
@@ -464,7 +476,7 @@ const AppPinner = GObject.registerClass(
             });
 
             let pressStartTime = 0;
-            this._longPressTimeoutId = null;
+            let longPressTimeoutId = null;
             let isLongPress = false;
 
             iconButton.connect('button-press-event', (actor, event) => {
@@ -472,9 +484,10 @@ const AppPinner = GObject.registerClass(
                 pressStartTime = Date.now();
                 isLongPress = false;
 
-                this._longPressTimeoutId = this._addTimeout(500, () => {
+                longPressTimeoutId = this._addTimeout(500, () => {
                     isLongPress = true;
                     this._animateAndMoveToEnd(appId, iconBox);
+                    longPressTimeoutId = null;
                     return GLib.SOURCE_REMOVE;
                 });
 
@@ -484,14 +497,14 @@ const AppPinner = GObject.registerClass(
                     duration: 200
                 });
 
-                return Clutter.EVENT_PROPAGATE;
+                return Clutter.EVENT_STOP;
             });
 
             iconButton.connect('button-release-event', (actor, event) => {
-                if (this._longPressTimeoutId !== null) {
-                    GLib.Source.remove(this._longPressTimeoutId);
-                    this._timeoutIds.delete(this._longPressTimeoutId);
-                    this._longPressTimeoutId = null;
+                if (longPressTimeoutId !== null) {
+                    GLib.Source.remove(longPressTimeoutId);
+                    this._timeoutIds.delete(longPressTimeoutId);
+                    longPressTimeoutId = null;
                 }
 
                 actor.ease({
@@ -500,14 +513,11 @@ const AppPinner = GObject.registerClass(
                     duration: 200
                 });
 
-                return Clutter.EVENT_PROPAGATE;
-            });
-
-            iconButton.connect('clicked', () => {
                 if (!isLongPress) {
                     Gio.AppInfo.launch_default_for_uri(url, null);
                 }
                 isLongPress = false;
+                return Clutter.EVENT_STOP;
             });
 
             const container = new St.Bin();
@@ -1227,39 +1237,16 @@ export default class AppPinnerExtension extends Extension {
 
         this._safeRecreateIndicator();
 
-        this._settings.connect('changed::startup-apps', () => this._syncAutostart());
-        this._syncAutostart();
-
-        this._startupChangedId = this._settings.connect(
-            'changed::startup-apps',
-            () => {
-                this._addTimeout(500, () => {
-                    console.log("[DEBUG] Startup apps changed!");
-                    this._syncAutostart();
-                    return GLib.SOURCE_REMOVE;
-                });
-            }
+        this._settingsHandler.push(
+            this._settings.connect('changed::startup-apps', () => this._syncAutostart()),
+            this._settings.connect('changed::pinned-apps', () => {
+                this._cleanOrphanedStartupApps();
+                this._syncAutostart();
+            })
         );
-
-        this._settings.connect('changed::pinned-apps', () => {
-            this._cleanOrphanedStartupApps();
-            this._syncAutostart();
-        });
-
-        this._settings.connect('changed::startup-apps', () => this._syncAutostart());
 
         this._cleanOrphanedStartupApps();
         this._syncAutostart();
-
-        this._settings.connect('changed::pinned-apps', () => {
-            this._cleanOrphanedStartupApps();
-            this._syncAutostart();
-        });
-
-        this._addTimeout(2000, () => {
-            this._syncAutostart();
-            return GLib.SOURCE_REMOVE;
-        });
 
         this._indicator._checkVisibility();
 
@@ -1316,51 +1303,19 @@ export default class AppPinnerExtension extends Extension {
             this._timeoutIds.clear();
         }
 
-        this._settings.disconnect(this._shortcutHandler);
-
-        const autostartDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'autostart']);
-        const dir = Gio.File.new_for_path(autostartDir);
-
-        const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-        let fileInfo;
-        while ((fileInfo = enumerator.next_file(null)) !== null) {
-            const name = fileInfo.get_name();
-            if (name.startsWith('app-pinner-')) {
-                GLib.unlink(`${autostartDir}/${name}`);
-            }
-        }
-
-        if (this._startupChangedId) {
-            this._settings.disconnect(this._startupChangedId);
-        }
-
-        try {
-            const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-            let fileInfo;
-            while ((fileInfo = enumerator.next_file(null)) !== null) {
-                const name = fileInfo.get_name();
-                if (name.startsWith('app-pinner-')) {
-                    GLib.unlink(`${autostartDir}/${name}`);
-                }
-            }
-        } catch (e) {
-            console.error('Errore pulizia autostart:', e);
+        if (this._shortcutHandlers) {
+            this._shortcutHandlers.forEach(id => this._settings.disconnect(id));
+            this._shortcutHandlers = null;
         }
 
         if (this._settingsHandler) {
             this._settingsHandler.forEach(handler => {
-                if (handler) {
-                    this._settings.disconnect(handler);
-                }
+                if (handler) this._settings.disconnect(handler);
             });
             this._settingsHandler = null;
         }
 
-        if (this._indicator && this._indicator._checkVisibility) {
-            GLib.Source.remove(this._indicator._checkVisibilityTimeout);
-        }
-
-        this._settings = null
+        this._settings = null;
     }
 
     _updateKeybinding(position) {
@@ -1532,13 +1487,12 @@ export default class AppPinnerExtension extends Extension {
     // 4. Funzioni helper e validazione
     _validateSettings() {
         const currentPos = this._settings.get_string('position-in-panel');
-        if (!['left', 'right'].includes(currentPos)) {
+        if (!['left', 'center', 'right'].includes(currentPos)) {
             this._settings.set_string('position-in-panel', 'right');
         }
     }
 
     _getAppInfo(appId) {
-        console.log(`[DEBUG] Getting app info for: ${appId}`);
 
         const appSys = Shell.AppSystem.get_default();
         const allApps = appSys.get_installed();

@@ -7,29 +7,27 @@
     height: 100%;
     padding: 2px 0;
     margin: auto 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     position: relative;
 }
 
 .app-pinner-icon {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
     padding: 0 !important;
     margin: auto;
     border-radius: 6px;
-    transition: all 0.2s ease-in-out;
+    transition-duration: 200ms;
+}
+
+.app-pinner-icon:hover,
+.app-pinner-icon:focus {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .app-pinner-link-icon {
-    margin: auto;
     -st-icon-style: symbolic;
 }
 
 .app-pinner-running-indicator {
-    background-color: #ff0000;
+    background-color: #57e389; 
     border-radius: 4px;
     width: 8px;
     height: 8px;
@@ -39,93 +37,102 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     z-index: 1000;
 }
-
 .app-pinner-label {
     max-width: 100px;
-    text-overflow: ellipsis;
     font-size: 0.8em;
-    margin-top: 2px;
 }
 
 .app-pinner-remove-btn {
-    font-size: 18px;
+    border-radius: 99px;
+    width: 28px;
+    height: 28px;
+    padding: 6px;
     background-color: transparent;
-    border-radius: 100px;
-    min-width: 18px;
-    min-height: 18px;
-    padding: 2px;
-    display: flex;
-    align-items: right;
-    justify-content: right;
-    transition: background-color 0.2s ease-in-out;
+    color: rgba(255, 255, 255, 0.2);
+    transition-duration: 200ms;
 }
-
 .app-pinner-remove-btn:hover {
-    background-color: rgba(255, 0, 0, 0.8);
+    background-color: rgba(255, 255, 255, 0.08); 
+    color: #ff7b63;
 }
 
-.app-pinner-remove-label {
-    font-size: 16px;
-    font-weight: bold;
-    color: white;
-    text-align: center;
+.quicklaunch-panel-button:hover,
+.quicklaunch-panel-button:active,
+.quicklaunch-panel-button:focus {
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.quicklaunch-pin-button {
+    border-radius: 6px;
+    padding: 0 4px;
+    transition-duration: 200ms;
+}
+.quicklaunch-pin-button:hover,
+.quicklaunch-pin-button:focus {
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 .search-box {
-    width: 200px;
-    padding: 8px 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 260px;
+    padding: 5px 14px;
+}
+
+.app-pinner-search-entry {
+    width: 100%;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 14px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+    color: white;
+    transition-duration: 200ms;
+}
+.app-pinner-search-entry:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
 }
 
 .app-pinner-link-input {
-    min-width: 200px;
-    padding: 6px 12px;
-    border-radius: 6px;
-    background-color: rgba(0,0,0,0.3);
-    color: #ffffff;
-    border: 1px solid rgba(255,255,255,0.2);
+    min-width: 180px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: white;
+    border: 1px solid transparent;
     font-size: 13px;
+    transition-duration: 200ms;
 }
-
 .app-pinner-link-input:focus {
-    border-color: #3584e4;
-    box-shadow: inset 0 0 0 1px #3584e4;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
 }
 
 .app-pinner-add-link-btn {
-    background-color: rgba(78, 166, 78, 0.8);
+    background-color: transparent;
+    color: #78aeed;
     border-radius: 8px;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 6px;
-    margin-left: 6px;
-    transition: all 0.2s ease-in-out;
+    min-width: 50px;
+    padding: 6px 12px;
+    margin-left: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    transition-duration: 200ms;
 }
-
 .app-pinner-add-link-btn:hover {
-    background-color: rgba(98, 196, 98, 0.9);
-    transform: scale(1.05);
+    background-color: rgba(120, 174, 237, 0.12); 
+    color: #99c1f1;
 }
-
 .app-pinner-add-link-btn:active {
-    background-color: rgba(68, 146, 68, 0.9);
+    background-color: rgba(120, 174, 237, 0.2);
 }
 
 .app-pinner-icon-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
     width: 100%;
 }
-
 .app-pinner-link-box {
-    margin: 8px;
-    padding: 6px;
-    background-color: rgba(255,255,255,0.05);
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.1);
+    margin: 4px 14px 12px 14px;
+    padding: 0;
+    background-color: transparent;
+    border: none;
 }

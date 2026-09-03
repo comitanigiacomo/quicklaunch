@@ -544,15 +544,12 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
     }
 
     _showErrorDialog(message) {
-        const dialog = new Gtk.MessageDialog({
-            transient_for: this._window,
-            modal: true,
-            message_type: Gtk.MessageType.ERROR,
-            buttons: Gtk.ButtonsType.OK,
-            text: message
+        const dialog = new Adw.AlertDialog({
+            heading: 'Error',
+            body: message,
         });
-        dialog.connect('response', () => dialog.destroy());
-        dialog.present();
+        dialog.add_response('ok', 'OK');
+        dialog.present(null);
     }
 
     _parseCustomShortcut(text) {
@@ -625,16 +622,6 @@ export default class AppPinnerExtensionPreferences extends ExtensionPreferences 
         if (!appInfo) {
             const cleanId = appId.replace(/^application:\/\//, '');
             appInfo = Gio.DesktopAppInfo.new(`${cleanId}.desktop`);
-        }
-
-        if (!appInfo) {
-            const shellApp = Shell.AppSystem.get_default().lookup_app(appId);
-            if (shellApp) {
-                return {
-                    name: shellApp.get_name(),
-                    icon: shellApp.get_icon()
-                };
-            }
         }
 
         if (!appInfo) {

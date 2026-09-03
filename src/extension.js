@@ -15,6 +15,7 @@ const AppPinner = GObject.registerClass(
         // 1. Costruttore e inizializzazione
         _init(settings) {
             super._init(0.0, _('App Pinner'));
+            this.add_style_class_name('quicklaunch-panel-button');
             this._settings = settings;
             this._destroyed = false;
             this._pendingApps = new Set();
@@ -35,9 +36,7 @@ const AppPinner = GObject.registerClass(
             this._appStateChangedId = this._appSystem.connect('app-state-changed',
                 () => this._updateRunningIndicators());
 
-            // Contenitore principale
             this._mainContainer = new St.BoxLayout({
-                style_class: 'panel-button',
                 vertical: false,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
@@ -46,28 +45,28 @@ const AppPinner = GObject.registerClass(
             });
             this.add_child(this._mainContainer);
 
-            // Icona del menu
-            this._menuIcon = new St.Icon({
-                icon_name: 'view-pin-symbolic',
-                style_class: 'system-status-icon app-pinner-menu-icon',
-                icon_size: 15
+            this._menuIconButton = new St.Button({
+                style_class: 'quicklaunch-pin-button',
+                reactive: true,
+                can_focus: true,
+                track_hover: true,
+                child: new St.Icon({
+                    icon_name: 'view-pin-symbolic',
+                    style_class: 'system-status-icon app-pinner-menu-icon',
+                    icon_size: 15
+                })
             });
-            this._mainContainer.add_child(this._menuIcon);
+            this._menuIcon = this._menuIconButton.get_child();
+            this._mainContainer.add_child(this._menuIconButton);
 
-            // Contenitore icone pinnate
             this._pinnedIconsBox = new St.BoxLayout({
                 style_class: 'app-pinner-icons',
-                vertical: false,
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
-                x_expand: true,
-                y_expand: true
+                vertical: false
             });
             this._mainContainer.add_child(this._pinnedIconsBox);
 
             this._updateIconsSpacing();
 
-            // Connessioni impostazioni
             this._settingsHandler.push(
                 this._settings.connect('changed::icon-size', () => this._refreshUI()),
                 this._settings.connect('changed::spacing', () => {
@@ -107,7 +106,6 @@ const AppPinner = GObject.registerClass(
                     this._logindId = this._logindProxy.connectSignal('PrepareForSleep',
                         this._handleSleepSignal.bind(this));
                 } catch (e) {
-                    console.error('Errore inizializzazione proxy login1:', e.message);
                 }
             });
 
@@ -152,8 +150,6 @@ const AppPinner = GObject.registerClass(
             return sourceId;
         }
 
-        // Intercettiamo il button press a livello di vfunc per evitare che
-        // PanelMenu.Button apra il menu quando si clicca su un'icona pinnata
         vfunc_event(event) {
             if (event.type() === Clutter.EventType.BUTTON_PRESS ||
                 event.type() === Clutter.EventType.TOUCH_BEGIN) {
@@ -207,17 +203,17 @@ const AppPinner = GObject.registerClass(
         _buildMenu() {
             this.menu.removeAll();
 
-            // Barra di ricerca
             const searchEntry = new PopupMenu.PopupBaseMenuItem();
             const searchBox = new St.BoxLayout({
                 vertical: false,
                 style_class: 'search-box',
-                x_expand: true,
+                x_expand: false,
                 x_align: Clutter.ActorAlign.FILL
             });
 
             this._searchInput = new St.Entry({
                 hint_text: _('Search applications...'),
+                style_class: 'app-pinner-search-entry',
                 can_focus: true,
                 x_expand: true
             });
@@ -226,18 +222,15 @@ const AppPinner = GObject.registerClass(
             searchEntry.actor.add_child(searchBox);
             this.menu.addMenuItem(searchEntry);
 
-            // Sezione risultati
             this._resultsSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(this._resultsSection);
 
-            // Sezione pinnati
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             this._pinnedSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(this._pinnedSection);
 
             this._searchInput.clutter_text.connect('text-changed', () => this._updateSearch());
 
-            // Sezione aggiungi link
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             const linkSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(linkSection);
@@ -245,7 +238,7 @@ const AppPinner = GObject.registerClass(
             const linkBox = new St.BoxLayout({
                 vertical: false,
                 style_class: 'app-pinner-link-box',
-                x_expand: true,
+                x_expand: false,
                 margin_top: 6,
                 margin_bottom: 6
             });
@@ -279,8 +272,7 @@ const AppPinner = GObject.registerClass(
             this._mainContainer.connect('button-press-event', (actor, event) => {
                 if (event.get_button() === Clutter.BUTTON_PRIMARY) {
                     const target = event.get_source();
-                    // Se il click è su un'icona pinnata, lasciamo che gestisca l'evento l'icona stessa
-                    if (this._pinnedIconsBox.contains(target)) {
+                            if (this._pinnedIconsBox.contains(target)) {
                         return Clutter.EVENT_PROPAGATE;
                     }
                     this.menu.toggle();
@@ -326,7 +318,6 @@ const AppPinner = GObject.registerClass(
                 }
 
                 if (!app) {
-                    console.error(`[CRITICAL] App not found in any location: ${appId}`);
                     return;
                 }
             }
@@ -342,7 +333,7 @@ const AppPinner = GObject.registerClass(
             const iconContainer = new St.Bin({
                 style_class: 'app-pinner-icon-container',
                 x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER
             });
 
 
@@ -469,11 +460,6 @@ const AppPinner = GObject.registerClass(
                 track_hover: true
             });
 
-            iconButton.connect('notify::hover', () => {
-                iconButton.style = iconButton.hover
-                    ? 'background: rgba(255,255,255,0.1); border-radius: 6px;'
-                    : '';
-            });
 
             let pressStartTime = 0;
             let longPressTimeoutId = null;
@@ -539,14 +525,7 @@ const AppPinner = GObject.registerClass(
             return iconBox;
         }
 
-        _checkVisibility() {
-            if (this._destroyed) return;
-            this._updateVisibility();
-            this._addTimeout(2000, () => {
-                this._checkVisibility();
-                return GLib.SOURCE_REMOVE;
-            });
-        }
+
 
         // 4. Gestione interazioni utente
         _launchApp(appId) {
@@ -566,7 +545,6 @@ const AppPinner = GObject.registerClass(
                         app = new Shell.App({ desktop_app_info: desktopApp });
                     }
                     if (!app) {
-                        console.error(`[ERROR] Application ${appId} not found`);
                         return;
                     }
                 }
@@ -817,7 +795,7 @@ const AppPinner = GObject.registerClass(
             }
         }
 
-        async _updateSearch() {
+        _updateSearch() {
             this._resultsSection.box.destroy_all_children();
             const query = this._searchInput.get_text().trim().toLowerCase();
             if (!query) return;
@@ -919,12 +897,7 @@ const AppPinner = GObject.registerClass(
         }
 
         _shortenUrl(url) {
-            try {
-                const parsed = new URL(url);
-                return parsed.hostname.replace(/^www\./i, '');
-            } catch {
-                return url.substring(0, 15) + '...';
-            }
+            return this._getUrlName(url);
         }
 
         _forceFullRefresh() {
@@ -1069,7 +1042,8 @@ const AppPinner = GObject.registerClass(
         _addMenuPinnedItem(appId) {
             if (appId.startsWith('link://')) {
                 const url = appId.replace('link://', '');
-                const item = new PopupMenu.PopupMenuItem(url);
+                const urlName = this._getUrlName(url);
+                const item = new PopupMenu.PopupMenuItem(urlName);
 
                 const icon = new St.Icon({
                     icon_name: 'emblem-web-symbolic',
@@ -1082,7 +1056,10 @@ const AppPinner = GObject.registerClass(
                 item.actor.add_child(spacer);
 
                 const removeBtn = new St.Button({
-                    child: new St.Label({ text: '×' }),
+                    child: new St.Icon({
+                        icon_name: 'window-close-symbolic',
+                        icon_size: 16
+                    }),
                     style_class: 'app-pinner-remove-btn'
                 });
 
@@ -1100,7 +1077,6 @@ const AppPinner = GObject.registerClass(
             } else {
                 const app = Gio.DesktopAppInfo.new(`${appId}.desktop`);
                 if (!app) {
-                    console.error(`Applicazione non trovata nel menu: ${appId}`);
                     return;
                 }
 
@@ -1115,9 +1091,9 @@ const AppPinner = GObject.registerClass(
                 item.actor.add_child(spacer);
 
                 const removeBtn = new St.Button({
-                    child: new St.Label({
-                        text: '×',
-                        style_class: 'app-pinner-remove-label'
+                    child: new St.Icon({
+                        icon_name: 'window-close-symbolic',
+                        icon_size: 16
                     }),
                     style_class: 'app-pinner-remove-btn'
                 });
@@ -1187,7 +1163,7 @@ export default class AppPinnerExtension extends Extension {
         );
 
         this._sessionConnection = Gio.DBus.session;
-        this._sessionWatcher = this._sessionConnection.watch_name(
+        this._sessionWatcherId = this._sessionConnection.watch_name(
             'org.gnome.Shell',
             Gio.BusNameWatcherFlags.NONE,
             () => { },
@@ -1208,7 +1184,6 @@ export default class AppPinnerExtension extends Extension {
                 this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(dbusInterface, this);
                 this._dbusImpl.export(Gio.DBus.session, '/org/gnome/Shell/Extensions/AppPinner');
             } catch (e) {
-                console.error('Errore registrazione D-Bus:', e.message);
             }
         }
 
@@ -1248,7 +1223,6 @@ export default class AppPinnerExtension extends Extension {
         this._cleanOrphanedStartupApps();
         this._syncAutostart();
 
-        this._indicator._checkVisibility();
 
     }
 
@@ -1263,7 +1237,6 @@ export default class AppPinnerExtension extends Extension {
             try {
                 this._dbusImpl.unexport();
             } catch (e) {
-                console.error('DBus unexport error:', e);
             }
             this._dbusImpl = null;
         }
@@ -1384,7 +1357,6 @@ export default class AppPinnerExtension extends Extension {
             const gioApp = Gio.DesktopAppInfo.new(`${appId}.desktop`) || Gio.DesktopAppInfo.new(appId);
 
             if (!gioApp) {
-                console.error(`[ERROR] App ${appId} non trovata in nessun formato`);
                 return;
             }
         } else {
@@ -1427,12 +1399,10 @@ export default class AppPinnerExtension extends Extension {
                     GLib.file_set_contents(`${autostartDir}/${fileName}`, content);
                     GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
                 } catch (e) {
-                    console.error(`Errore scrittura link ${url}:`, e.message);
                 }
             } else {
                 const appInfo = this._getAppInfo(entry);
                 if (!appInfo) {
-                    console.error(`[ERROR] App non trovata: ${entry}`);
                     return;
                 }
 
@@ -1443,7 +1413,6 @@ export default class AppPinnerExtension extends Extension {
 
                 const execCommand = appInfo.get_string('Exec');
                 if (!execCommand) {
-                    console.error(`[ERROR] Comando non trovato per ${entry}`);
                     return;
                 }
 
@@ -1464,7 +1433,6 @@ export default class AppPinnerExtension extends Extension {
                     GLib.file_set_contents(`${autostartDir}/${fileName}`, desktopContent);
                     GLib.chmod(`${autostartDir}/${fileName}`, 0o644);
                 } catch (e) {
-                    console.error(`Errore scrittura app ${entry}:`, e.message);
                 }
             }
         });
@@ -1480,7 +1448,6 @@ export default class AppPinnerExtension extends Extension {
                 }
             }
         } catch (e) {
-            console.error('Errore durante la pulizia dei file:', e.message);
         }
     }
 

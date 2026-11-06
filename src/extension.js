@@ -23,7 +23,10 @@ const AppPinner = GObject.registerClass(
             this._longPressTimeoutId = null;
 
             this._windowTracker = Shell.WindowTracker.get_default();
-            this._windowTracker.connect('tracked-windows-changed', this._updateRunningIndicators.bind(this));
+            this._windowTrackerId = this._windowTracker.connect(
+                'tracked-windows-changed',
+                this._updateRunningIndicators.bind(this)
+            );
 
             this._settingsHandler.push(
                 this._settings.connect('changed::show-in-panel', () => this._updateVisibility()),
@@ -37,7 +40,7 @@ const AppPinner = GObject.registerClass(
                 () => this._updateRunningIndicators());
 
             this._mainContainer = new St.BoxLayout({
-                vertical: false,
+                orientation: Clutter.Orientation.HORIZONTAL,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
                 reactive: true,
@@ -61,7 +64,7 @@ const AppPinner = GObject.registerClass(
 
             this._pinnedIconsBox = new St.BoxLayout({
                 style_class: 'app-pinner-icons',
-                vertical: false
+                orientation: Clutter.Orientation.HORIZONTAL
             });
             this._mainContainer.add_child(this._pinnedIconsBox);
 
@@ -82,7 +85,7 @@ const AppPinner = GObject.registerClass(
             );
 
 
-            this.menu.actor.connect('button-press-event', (actor, event) => {
+            this._menuButtonPressId = this.menu.actor.connect('button-press-event', (actor, event) => {
                 const target = event.get_source();
 
                 if (!this.menu.actor.contains(target)) {
@@ -174,6 +177,26 @@ const AppPinner = GObject.registerClass(
                 this._logindProxy = null;
             }
 
+            if (this._windowTrackerId && this._windowTracker) {
+                this._windowTracker.disconnect(this._windowTrackerId);
+                this._windowTrackerId = null;
+            }
+
+            if (this._menuButtonPressId && this.menu?.actor) {
+                this.menu.actor.disconnect(this._menuButtonPressId);
+                this._menuButtonPressId = null;
+            }
+
+            if (this._searchTextChangedId && this._searchInput?.clutter_text) {
+                this._searchInput.clutter_text.disconnect(this._searchTextChangedId);
+                this._searchTextChangedId = null;
+            }
+
+            if (this._mainContainerButtonPressId && this._mainContainer) {
+                this._mainContainer.disconnect(this._mainContainerButtonPressId);
+                this._mainContainerButtonPressId = null;
+            }
+
             this._settingsHandler?.forEach(h => this._settings.disconnect(h));
             this._settingsHandler = null;
 
@@ -205,7 +228,7 @@ const AppPinner = GObject.registerClass(
 
             const searchEntry = new PopupMenu.PopupBaseMenuItem();
             const searchBox = new St.BoxLayout({
-                vertical: false,
+                orientation: Clutter.Orientation.HORIZONTAL,
                 style_class: 'search-box',
                 x_expand: false,
                 x_align: Clutter.ActorAlign.FILL
@@ -229,14 +252,17 @@ const AppPinner = GObject.registerClass(
             this._pinnedSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(this._pinnedSection);
 
-            this._searchInput.clutter_text.connect('text-changed', () => this._updateSearch());
+            this._searchTextChangedId = this._searchInput.clutter_text.connect(
+                'text-changed',
+                () => this._updateSearch()
+            );
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             const linkSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(linkSection);
 
             const linkBox = new St.BoxLayout({
-                vertical: false,
+                orientation: Clutter.Orientation.HORIZONTAL,
                 style_class: 'app-pinner-link-box',
                 x_expand: false,
                 margin_top: 6,
@@ -269,7 +295,7 @@ const AppPinner = GObject.registerClass(
             linkSection.actor.add_child(linkBox);
 
             this._mainContainer.reactive = true;
-            this._mainContainer.connect('button-press-event', (actor, event) => {
+            this._mainContainerButtonPressId = this._mainContainer.connect('button-press-event', (actor, event) => {
                 if (event.get_button() === Clutter.BUTTON_PRIMARY) {
                     const target = event.get_source();
                             if (this._pinnedIconsBox.contains(target)) {
@@ -279,13 +305,6 @@ const AppPinner = GObject.registerClass(
                     return Clutter.EVENT_STOP;
                 }
                 return Clutter.EVENT_PROPAGATE;
-            });
-
-            this.menu.actor.connect('button-press-event', (actor, event) => {
-                const target = event.get_source();
-                if (!this.menu.actor.contains(target)) {
-                    this.menu.close();
-                }
             });
         }
 
@@ -325,7 +344,7 @@ const AppPinner = GObject.registerClass(
             const showLabels = this._settings.get_boolean('enable-labels');
 
             const iconBox = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
                 style_class: 'app-pinner-icon-box',
                 y_expand: true
             });
@@ -361,10 +380,6 @@ const AppPinner = GObject.registerClass(
             });
 
             this._updateIndicatorColor(runningIndicator);
-
-            this._settings.connect('changed::indicator-color',
-                () => this._updateIndicatorColor(runningIndicator));
-
 
             iconContainer.add_child(iconButton);
             iconContainer.add_child(runningIndicator);
@@ -444,7 +459,7 @@ const AppPinner = GObject.registerClass(
             const showLabels = this._settings.get_boolean('enable-labels');
 
             const iconBox = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
                 style_class: 'app-pinner-icon-box'
             });
 
@@ -999,7 +1014,15 @@ const AppPinner = GObject.registerClass(
 
         _updateIndicatorColor(indicator) {
             const color = this._settings.get_string('indicator-color');
-            indicator.set_style(`background-color: ${color};`);
+            if (indicator) {
+                indicator.set_style(`background-color: ${color};`);
+                return;
+            }
+            this._pinnedIconsBox?.get_children().forEach(iconBox => {
+                if (iconBox.runningIndicator) {
+                    iconBox.runningIndicator.set_style(`background-color: ${color};`);
+                }
+            });
         }
 
         _getUrlName(url) {
